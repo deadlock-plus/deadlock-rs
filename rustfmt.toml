@@ -1,0 +1,8 @@
+edition = "2024"
+max_width = 100
+
+# Pinned because the default infers the ending per file, which lets CRLF and LF coexist.
+newline_style = "Unix"
+
+# The std/external/crate import grouping is convention only: `group_imports` and
+# `imports_granularity` are nightly-only, and this workspace builds on stable.

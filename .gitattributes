@@ -1,0 +1,16 @@
+# Every text file is LF in the repository and LF in the working tree, on every platform.
+# Without this, each machine's `core.autocrlf` decides. `rustfmt.toml` pins the Rust side;
+# this pins everything else and stops mixed endings coming back through a checkout.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+
+# Generated, and large enough that a diff is noise rather than review material.
+pnpm-lock.yaml -diff linguist-generated
+Cargo.lock -diff linguist-generated

@@ -1,0 +1,15 @@
+# Product and vendor names that `doc_markdown` mistakes for code items. Backticking them
+# would be wrong: they are names, not things a reader can click through to.
+doc-valid-idents = [
+    "DeadRS",
+    "GameCoordinator",
+    "SteamID",
+    "ReadProcessMemory",
+    "VirtualQueryEx",
+    "KeyValues",
+    "..",
+]
+
+# Kept in step with `workspace.package.rust-version`, so `incompatible_msrv` catches a
+# too-new API at edit time rather than in the MSRV job.
+msrv = "1.88"

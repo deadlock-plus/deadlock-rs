@@ -1,0 +1,6 @@
+# Pinned so rustfmt output does not drift between contributors. Not the MSRV: that is
+# `rust-version` in Cargo.toml, checked by its own CI job.
+[toolchain]
+channel = "1.98.0"
+components = ["rustfmt", "clippy"]
+targets = ["x86_64-unknown-linux-musl", "aarch64-apple-darwin"]

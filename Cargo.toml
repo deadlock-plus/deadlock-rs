@@ -1,0 +1,53 @@
+[workspace]
+resolver = "2"
+members = ["crates/*", "apps/dlrs", "apps/overlay/src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "LGPL-3.0-or-later"
+repository = "https://github.com/deadlock-plus/deadlock-rs"
+authors = ["deadlock-plus contributors"]
+
+[workspace.dependencies]
+deadlock-core = { version = "0.1.0", path = "crates/deadlock-core" }
+# `default-features = false` here so members can narrow it; without it Cargo ignores a
+# member's own `default-features = false`.
+deadlock-data = { version = "0.1.0", path = "crates/deadlock-data", default-features = false }
+deadlock-events = { version = "0.1.0", path = "crates/deadlock-events" }
+deadlock-memory = { version = "0.1.0", path = "crates/deadlock-memory" }
+deadlock-reader = { version = "0.1.0", path = "crates/deadlock-reader" }
+deadlock-walker = { version = "0.1.0", path = "crates/deadlock-walker" }
+deadlock-replay = { version = "0.1.0", path = "crates/deadlock-replay", default-features = false }
+
+# Pure Rust so `forbid(unsafe_code)` holds and no C toolchain is needed to cross-compile.
+bzip2-rs = { version = "0.1.2", default-features = false }
+memchr = "2"
+prost = "0.14"
+valveprotos = { git = "https://github.com/deadlock-api/deadlock-api", rev = "19a34aa9cedabd3374cb4af5c2d714520784ce1f", features = ["reflect", "gc-common", "gc-client"] }
+# `haste_core` rather than `haste`: the latter pulls in `haste_broadcast` (reqwest, tokio).
+haste_core = { git = "https://github.com/deadlock-api/deadlock-api", rev = "19a34aa9cedabd3374cb4af5c2d714520784ce1f" }
+source2 = { path = "../source2-rs/crates/source2", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+
+[workspace.lints.rust]
+missing_docs = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"
+# Callers here run poll loops, where an undocumented panic takes the whole overlay down.
+missing_panics_doc = "warn"
+doc_markdown = "warn"
+needless_pass_by_value = "warn"
+semicolon_if_nothing_returned = "warn"
+uninlined_format_args = "warn"
+items_after_statements = "warn"
+redundant_closure_for_method_calls = "warn"
+
+# `unwrap_used`, `must_use_candidate` and `pedantic` as a group are deliberately off: the
+# first two account for 376 hits between them, almost all in tests or on plain getters,
+# and they are `pedantic`'s most prolific members here.
