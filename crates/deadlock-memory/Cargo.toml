@@ -1,0 +1,52 @@
+[package]
+name = "deadlock-memory"
+description = "Read-only external process-memory client: attach, read, scan for signatures"
+keywords = ["memory", "process", "windows", "linux", "reverse-engineering"]
+categories = ["os"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme = "README.md"
+
+[package.metadata.docs.rs]
+# docs.rs builds Linux + default features, which would hide the Windows backend and the
+# mock. Document the lot.
+all-features = true
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+
+[dependencies]
+memchr.workspace = true
+serde = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.59"
+features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_Memory",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Diagnostics_ToolHelp",
+]
+
+[dev-dependencies]
+# A dependency on itself is the supported way to enable a feature for tests only.
+# `#[cfg(test)]` covers the unit tests but not `tests/`, which link the library as an
+# ordinary dependency and so need `mock` on. Dev-dependencies do not propagate.
+deadlock-memory = { path = ".", features = ["mock"] }
+
+[features]
+default = []
+# Derive `serde::Serialize` on `Module` and `Region`.
+serde = ["dep:serde"]
+# `mock::MockMemory`, a fake address space for testing without a running process. Off by
+# default so it does not ship in release builds of consumers that never test against it.
+mock = []
+
+[lints]
+workspace = true
