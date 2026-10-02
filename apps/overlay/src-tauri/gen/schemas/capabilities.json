@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Lets the window subscribe to the two pollers. Nothing else is granted: the app only ever listens, and every value it shows is pushed from Rust.","local":true,"windows":["main"],"permissions":["core:event:default"]}}

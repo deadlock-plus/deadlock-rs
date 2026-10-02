@@ -1,0 +1,59 @@
+[package]
+name = "dlrs"
+description = "Command-line inspector for a running Deadlock client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+readme = "README.md"
+
+[dependencies]
+deadlock-core.workspace = true
+# `bundled` is not optional here: the CLI promises to answer with no game and no network,
+# which needs a roster compiled in. `client` and `online` are the real toggles.
+deadlock-data = { workspace = true, default-features = false, features = ["bundled"] }
+deadlock-events.workspace = true
+deadlock-reader = { workspace = true, features = ["events", "modifiers"] }
+deadlock-walker.workspace = true
+valveprotos.workspace = true
+# `default-features = false` drops `bzip2`, which only the `.meta.bz2` path needs and
+# `dlrs replay` does not expose.
+deadlock-replay = { workspace = true, optional = true }
+
+[dev-dependencies]
+# `source2` reads the game archive and `deadlock-reader` holds the constants transcribed
+# out of it; neither may depend on the other, so neither can check that the transcription
+# is still true. `dlrs` is the one place both are visible.
+source2 = { workspace = true, features = ["vpk", "resource", "kv3", "lz4", "zstd"] }
+
+[features]
+default = ["client", "vpk", "online", "timeline", "replay", "metrics"]
+# Read the installed game's own localisation, so names are correct and in the player's
+# language. Drop it to see the vendored snapshot on its own.
+client = ["deadlock-data/client"]
+# Read the game's own id tables out of the VPK archives, so ids and flags match the
+# installed build. Costs a VPK reader and a zstd decoder.
+vpk = ["deadlock-data/vpk"]
+# Allow refreshing the hero catalog from deadlock-api.com.
+online = ["deadlock-data/online"]
+# `dlrs timeline`. A passthrough because `dlrs` cannot name another crate's feature in a
+# `#[cfg]`. On by default: `serde` and `serde_json` are already in the graph.
+timeline = ["deadlock-events/timeline-jsonl"]
+# `dlrs replay`. Gates the optional `deadlock-replay` dependency above, and the command.
+replay = ["dep:deadlock-replay"]
+# `dlrs metrics`. Deliberately not forwarding to `deadlock-events/objective-context`: that
+# needs `deadlock-reader/positions`, which nothing may turn on by default. `positions`
+# below adds it.
+metrics = ["deadlock-events/crowd-control", "deadlock-events/landed-casts"]
+# Live world coordinates, matching deadlock-reader's own default and for the same reason.
+# A passthrough so `--all-features` turns it on here and in the reader together:
+# `Objective` and `PlayerRow` gain a field under it, and a build where only one side has
+# the feature will not compile. It also carries `deadlock-events/objective-context`, the
+# only accumulator that needs world coordinates.
+positions = ["deadlock-reader/positions", "deadlock-events/objective-context"]
+
+[lints]
+workspace = true

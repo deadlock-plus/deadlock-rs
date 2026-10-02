@@ -1,0 +1,37 @@
+[package]
+name = "deadrs-overlay"
+description = "Second-monitor overlay for Deadlock, over deadlock-rs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+readme = "../README.md"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+deadlock-core.workspace = true
+deadlock-data = { workspace = true, features = ["bundled", "client", "vpk"] }
+deadlock-reader = { workspace = true, features = ["events"] }
+deadlock-walker.workspace = true
+serde = { workspace = true }
+# Parsing Statlocker's rank responses. Also what
+# `the_typescript_view_declares_every_key_the_rust_view_sends` serialises a real view
+# with; it used to be a dev-dependency, and stopped being one when `statlocker` needed to
+# read a body at runtime.
+serde_json = { workspace = true }
+valveprotos.workspace = true
+tauri = { version = "2", features = [] }
+# The Statlocker facade's HTTP client, matching what `deadlock-data` already uses so the
+# workspace has one TLS stack rather than two. Nothing is requested without an API key.
+ureq = { workspace = true }
+
+[features]
+default = []
+
+[lints]
+workspace = true

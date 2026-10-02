@@ -1,0 +1,114 @@
+@import 'tailwindcss';
+
+/* Sized for a second monitor: dense enough to take in at a glance, dark enough to sit
+   next to a game without glowing. Angular rather than soft - squared corners and 1px
+   rules, so the scoreboard scans like a table instead of a stack of cards. */
+
+/* `static` so every token below is emitted as a real custom property even when nothing
+   currently references it. These are the design tokens, not incidental values: the two
+   team accents and their dim pairs have to exist as a set whether or not this week's
+   markup happens to use all four. */
+@theme static {
+  /* --- surfaces ------------------------------------------------------------------ */
+  --color-bg: #0d0f13;
+  --color-panel: #161a21;
+  --color-panel-2: #1c212a;
+  --color-line: #262c37;
+
+  /* --- text -----------------------------------------------------------------------
+     `fg` / `muted` / `dim` / `icon` are a deliberately raised set, not defaults. These
+     carry the icons and the secondary numbers, and at 11-12px the earlier pair sat near
+     3:1 on the panel - readable as a shape, not as a value, which is the wrong trade for
+     something read at a glance mid-fight. Measured against --color-panel:
+       fg 14.5:1   icon 7.6:1   muted 7.0:1   dim 4.7:1                              */
+  --color-fg: #e7eaf0;
+  --color-muted: #9ba4b5;
+  --color-dim: #7c8598;
+  /* Icons only. They have less ink than a glyph of the same size, so they need to be a
+     step brighter than the label beside them to weigh the same. */
+  --color-icon: #a3acbe;
+
+  /* --- team accents ---------------------------------------------------------------
+     Load-bearing: these are how a reader tells the two sides apart, so nothing else in
+     the UI is allowed to borrow them. */
+  --color-amber: #e0a34a;
+  --color-amber-dim: #6b4f24;
+  --color-sapphire: #4d9de0;
+  --color-sapphire-dim: #24486b;
+
+  /* --- product accent -------------------------------------------------------------
+     Rust's brand orange. `rust` itself is 3.7:1 on the panel, which is fine for rules,
+     fills and 2px markers but not for type, so anything with a glyph in it uses
+     `rust-text` - the same hue opened up a step (5.3:1 on --color-panel, 4.9:1 on
+     --color-panel-2, 5.8:1 on --color-bg). Nudged 6 degrees toward orange so it does not
+     read as --color-bad beside it. */
+  --color-rust: #ce422b;
+  --color-rust-text: #e16b47;
+  --color-rust-dim: #6a261b;
+
+  /* --- state ---------------------------------------------------------------------- */
+  --color-good: #5fbf7f;
+  --color-bad: #e05d5d;
+
+  /* --- type -----------------------------------------------------------------------
+     A px scale, not a rem one: the overlay is a fixed-density readout and every size
+     here was chosen against a real glyph height rather than a ratio. */
+  --text-nano: 9px;
+  --text-micro: 10px;
+  --text-mini: 11px;
+  --text-tiny: 12px;
+  --text-body: 13px;
+
+  --font-ui: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+
+  /* Used by the swap popups. Paired with `motion-reduce:animate-none` at the call site:
+     a popup that slides is a popup that draws the eye away from the fight, so a system
+     that asks for less motion gets one that simply appears. */
+  --animate-toast-in: toast-in 140ms ease-out;
+
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+}
+
+@layer base {
+  :root {
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* 13px on the root element, not on `body`, so it is the `rem` for the whole document.
+     That is deliberate: Tailwind's spacing scale is `rem`-based, so every gap and padding
+     in the app scales with this one number and the overlay's density stays a single knob.
+     The consequence to know about is that one spacing step is 3.25px here, not 4px -
+     `p-2` is 6.5px. The type scale above is in px on purpose and is unaffected. */
+  html,
+  body {
+    height: 100%;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-ui);
+    font-size: var(--text-body);
+    overflow: hidden;
+  }
+
+  /* The panes scroll, and the platform scrollbar is a pale 15px slab that would be the
+     brightest thing on screen. Narrow, square and dark, to match everything else - and
+     narrow enough that it stops eating column width at 340px. */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-dim);
+  }
+}
