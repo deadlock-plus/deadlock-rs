@@ -1,0 +1,25 @@
+[package]
+name = "deadlock-replay"
+description = "Reads Deadlock replay files: .meta.bz2 match metadata and .dem demos"
+keywords = ["deadlock", "replay", "protobuf", "source2"]
+categories = ["game-development", "parser-implementations"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme = "README.md"
+
+[dependencies]
+bzip2-rs = { workspace = true, optional = true }
+haste_core.workspace = true
+prost.workspace = true
+valveprotos.workspace = true
+
+[features]
+default = ["bzip2"]
+bzip2 = ["dep:bzip2-rs"]
+
+[lints]
+workspace = true
