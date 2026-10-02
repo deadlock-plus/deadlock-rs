@@ -1,0 +1,67 @@
+[package]
+name = "deadlock-events"
+description = "Multi-source event engine for Deadlock: polls the entity reader and the GC scanner on their own schedules"
+keywords = ["deadlock", "events", "source2", "steam"]
+categories = ["game-development"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme = "README.md"
+
+[package.metadata.docs.rs]
+# docs.rs builds Linux + default features, which would hide the Windows backend and every
+# optional module. Document the lot.
+all-features = true
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+
+[dependencies]
+deadlock-reader = { workspace = true, features = ["events"] }
+deadlock-memory.workspace = true
+deadlock-walker.workspace = true
+valveprotos.workspace = true
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+
+[dev-dependencies]
+# The party reader test drives a session over a fake address space.
+deadlock-memory = { workspace = true, features = ["mock"] }
+# Unconditional because dev-dependencies cannot be feature-gated; the tests that need it
+# are `#[cfg(feature = "timeline")]`.
+serde_json.workspace = true
+
+[features]
+default = []
+# Makes `deadlock-reader`'s types serialisable through this crate's re-exports. A separate
+# axis from `timeline`, which needs `serde` for its own record and embeds no
+# `deadlock-reader` type.
+serde = ["deadlock-reader/serde"]
+# The durable event timeline: `TimelineEvent`, the `EventSink` trait, and `TimelineRecorder`.
+# Off by default because most consumers of the event stream never persist it, and this is
+# the only thing in the crate that pulls a serialisation dependency.
+timeline = ["dep:serde"]
+# The file-backed append-only JSONL sink, `JsonlSink`. Split from `timeline` so a consumer
+# writing to SQLite implements `EventSink` without linking a JSON encoder.
+timeline-jsonl = ["timeline", "dep:serde_json"]
+# Cross-tick crowd-control accumulation: `cc.received.<type>.{events, seconds}` per player.
+# Off by default for cost, not dependencies: `deadlock-reader/modifiers` reads every
+# player's modifier list every tick and roughly triples what a snapshot costs.
+crowd-control = ["deadlock-reader/modifiers"]
+# Ability landed-cast attribution: `ability.subclass_<id>.{landed_casts, enemies_hit, ...}`
+# per caster. An independent axis from `crowd-control`, though both forward to the same
+# `modifiers` read, which Cargo unifies - so asking for both still costs one read per tick.
+landed-casts = ["deadlock-reader/modifiers"]
+# Objective-context bucketing: per-player `open.*`, `midboss.*`, `walker.*` and `urn.*`
+# stats, plus match-level `urn_fights`, `urn_fight_seconds` and `rift_fights`.
+#
+# `positions` is a compile-time requirement rather than a runtime check because without
+# world coordinates the two available answers - report nothing, or call everything `open` -
+# both emit a full set of keys whose zeros a consumer cannot tell from measurements. A
+# build without positions gets no tracker rather than one that lies. It is the cheap
+# dependency of the three: one extra pointer chase per entity.
+objective-context = ["deadlock-reader/positions"]
+
+[lints]
+workspace = true
