@@ -1,0 +1,462 @@
+{
+  "version": 1,
+  "description": "Class/field pairs deadlock-memory looks up in Deadlock's Source 2 runtime schema.",
+  "abi": "win64-msvc",
+  "baseline_build": 6723,
+  "generated_from": "crates/deadlock-memory/src/fields.rs (WIN64_FIELDS)",
+  "pinned_by": "crates/deadlock-memory/tests/schema_fields_json.rs",
+  "fallback": "Offset used only when a runtime lookup misses. Drifts with every Deadlock build.",
+  "inferred": "The class was recovered from context rather than a literal, so the pairing is inferred.",
+  "fields": [
+    {
+      "class": "CBaseModifier",
+      "field": "m_bDisabled",
+      "fallback": "0x71",
+      "inferred": false
+    },
+    {
+      "class": "CBaseModifier",
+      "field": "m_flCreationTime",
+      "fallback": "0x30",
+      "inferred": false
+    },
+    {
+      "class": "CBaseModifier",
+      "field": "m_flDuration",
+      "fallback": "0x34",
+      "inferred": false
+    },
+    {
+      "class": "CBaseModifier",
+      "field": "m_hAbility",
+      "fallback": "0x3c",
+      "inferred": false
+    },
+    {
+      "class": "CBaseModifier",
+      "field": "m_hCaster",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "CBaseModifier",
+      "field": "m_iMaxStackCount",
+      "fallback": "0x64",
+      "inferred": false
+    },
+    {
+      "class": "CBaseModifier",
+      "field": "m_iStackCount",
+      "fallback": "0x62",
+      "inferred": false
+    },
+    {
+      "class": "CBaseModifier",
+      "field": "m_nAbilitySubclassID",
+      "fallback": "0x5c",
+      "inferred": false
+    },
+    {
+      "class": "CBaseModifier",
+      "field": "m_nSerialNumber",
+      "fallback": "0x28",
+      "inferred": false
+    },
+    {
+      "class": "CCitadelAbilityComponent",
+      "field": "m_vecAbilities",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "CCitadelPlayerController",
+      "field": "m_PlayerDataGlobal",
+      "fallback": "0x908",
+      "inferred": false
+    },
+    {
+      "class": "CCitadelPlayerController",
+      "field": "m_bIsLocalPlayerController",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "CCitadelPlayerController",
+      "field": "m_iTeamNum",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "CCitadelPlayerController",
+      "field": "m_steamID",
+      "fallback": "0x788",
+      "inferred": false
+    },
+    {
+      "class": "CCitadelPlayerController",
+      "field": "m_unLobbyPlayerSlot",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "CCitadelRecentDamage",
+      "field": "m_flLastDamageTime",
+      "fallback": "0x8",
+      "inferred": false
+    },
+    {
+      "class": "CCitadelRecentDamage",
+      "field": "m_flStartTime",
+      "fallback": "0xc",
+      "inferred": false
+    },
+    {
+      "class": "CCitadelRecentDamage",
+      "field": "m_hPlayerEntToStore",
+      "fallback": "0x14",
+      "inferred": false
+    },
+    {
+      "class": "CCitadelTrooperMinimap",
+      "field": "m_vecFOWEntities",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "CCitadel_Modifier_HeroUpgradeBonuses",
+      "field": "m_flArmorPower",
+      "fallback": "0x13c",
+      "inferred": false
+    },
+    {
+      "class": "CCitadel_Modifier_HeroUpgradeBonuses",
+      "field": "m_flTechPower",
+      "fallback": "0x140",
+      "inferred": false
+    },
+    {
+      "class": "CCitadel_Modifier_HeroUpgradeBonuses",
+      "field": "m_flWeaponPower",
+      "fallback": "0x138",
+      "inferred": false
+    },
+    {
+      "class": "CGameSceneNode",
+      "field": "m_vecAbsOrigin",
+      "fallback": "0xc8",
+      "inferred": false
+    },
+    {
+      "class": "CModifierProperty",
+      "field": "m_vecModifiers",
+      "fallback": "0x40",
+      "inferred": false
+    },
+    {
+      "class": "CPlayerTrackedStatsEntity",
+      "field": "m_nPlayerSlot",
+      "fallback": "0x660",
+      "inferred": true
+    },
+    {
+      "class": "CPlayerTrackedStatsEntity",
+      "field": "m_nTeam",
+      "fallback": "0x664",
+      "inferred": true
+    },
+    {
+      "class": "CPlayerTrackedStatsEntity",
+      "field": "m_vecTrackedStats",
+      "fallback": "0x5f0",
+      "inferred": true
+    },
+    {
+      "class": "CTeamTrackedStatsEntity",
+      "field": "m_nTeam",
+      "fallback": "0x660",
+      "inferred": true
+    },
+    {
+      "class": "CTeamTrackedStatsEntity",
+      "field": "m_vecTrackedStats",
+      "fallback": "0x5f0",
+      "inferred": true
+    },
+    {
+      "class": "C_BaseEntity",
+      "field": "m_iHealth",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_BaseEntity",
+      "field": "m_iMaxHealth",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_BaseEntity",
+      "field": "m_iTeamNum",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_BaseEntity",
+      "field": "m_pModifierProp",
+      "fallback": "0x348",
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelBaseAbility",
+      "field": "m_eAbilitySlot",
+      "fallback": "0x77c",
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelBaseAbility",
+      "field": "m_flCastCompletedTime",
+      "fallback": "0x770",
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelBaseAbility",
+      "field": "m_flCooldownEnd",
+      "fallback": "0x76c",
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelBaseAbility",
+      "field": "m_flCooldownStart",
+      "fallback": "0x768",
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelGameRules",
+      "field": "m_bServerPaused",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelGameRules",
+      "field": "m_eGameState",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelGameRules",
+      "field": "m_flGameStartTime",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelGameRules",
+      "field": "m_iAmberRejuvCount",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelGameRules",
+      "field": "m_iMidbossKillCount",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelGameRules",
+      "field": "m_iSapphireRejuvCount",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelGameRules",
+      "field": "m_unMatchID",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelGameRulesProxy",
+      "field": "m_pGameRules",
+      "fallback": "0x5f0",
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelPlayerPawn",
+      "field": "m_CCitadelAbilityComponent",
+      "fallback": "0x1438",
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelPlayerPawn",
+      "field": "m_flSimulationTime",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelPlayerPawn",
+      "field": "m_hController",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelPlayerPawn",
+      "field": "m_iHealth",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelPlayerPawn",
+      "field": "m_iMaxHealth",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelPlayerPawn",
+      "field": "m_iTeamNum",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelPlayerPawn",
+      "field": "m_nCurrencies",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelPlayerPawn",
+      "field": "m_nLevel",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelPlayerPawn",
+      "field": "m_nSpentCurrencies",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelPlayerPawn",
+      "field": "m_pGameSceneNode",
+      "fallback": "0x330",
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelPlayerPawn",
+      "field": "m_sPlayerDamageTaken",
+      "fallback": "0x13e0",
+      "inferred": false
+    },
+    {
+      "class": "C_CitadelTeam",
+      "field": "m_nStreetBrawlScore",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_NPC_Boss_Tier2",
+      "field": "m_iLane",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "C_Team",
+      "field": "m_aPlayerControllers",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "PlayerDataGlobal_t",
+      "field": "m_iDeaths",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "PlayerDataGlobal_t",
+      "field": "m_iDenies",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "PlayerDataGlobal_t",
+      "field": "m_iGoldNetWorth",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "PlayerDataGlobal_t",
+      "field": "m_iHeroDamage",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "PlayerDataGlobal_t",
+      "field": "m_iHeroHealing",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "PlayerDataGlobal_t",
+      "field": "m_iLastHits",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "PlayerDataGlobal_t",
+      "field": "m_iLevel",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "PlayerDataGlobal_t",
+      "field": "m_iObjectiveDamage",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "PlayerDataGlobal_t",
+      "field": "m_iPlayerAssists",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "PlayerDataGlobal_t",
+      "field": "m_iPlayerKills",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "PlayerDataGlobal_t",
+      "field": "m_nHeroID",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "PlayerDataGlobal_t",
+      "field": "m_tHeldItem",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "PlayerDataGlobal_t",
+      "field": "m_vecUpgrades",
+      "fallback": null,
+      "inferred": false
+    },
+    {
+      "class": "STrooperFOWEntity",
+      "field": "m_nFlags",
+      "fallback": "0x32",
+      "inferred": false
+    },
+    {
+      "class": "STrooperFOWEntity",
+      "field": "m_nPosX",
+      "fallback": "0x30",
+      "inferred": false
+    },
+    {
+      "class": "STrooperFOWEntity",
+      "field": "m_nPosY",
+      "fallback": "0x31",
+      "inferred": false
+    }
+  ]
+}

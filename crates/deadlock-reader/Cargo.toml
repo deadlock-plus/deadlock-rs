@@ -1,0 +1,59 @@
+[package]
+name = "deadlock-reader"
+description = "Read-only external reader for Deadlock's live match state, driven by the Source 2 runtime schema"
+keywords = ["deadlock", "source2", "memory", "reverse-engineering"]
+categories = ["game-development", "os"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme = "README.md"
+
+[package.metadata.docs.rs]
+# docs.rs builds Linux + default features, which would hide the Windows-only items and every
+# optional module. Document the lot.
+all-features = true
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+
+[dependencies]
+deadlock-core.workspace = true
+deadlock-memory.workspace = true
+serde = { workspace = true, optional = true }
+
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.59"
+features = ["Win32_Foundation", "Win32_System_Registry"]
+
+[dev-dependencies]
+# Unconditional because dev-dependencies cannot be feature-gated; the tests that need it
+# are `#[cfg(feature = "serde")]`.
+serde_json.workspace = true
+# `crate::mock` is gated behind `deadlock-memory`'s `mock` feature, and dev-dependencies of
+# this crate are the only way to turn it on for the tests without shipping it.
+deadlock-memory = { workspace = true, features = ["mock"] }
+
+[features]
+default = []
+serde = ["dep:serde", "deadlock-core/serde", "deadlock-memory/serde"]
+# Snapshot-to-snapshot diffing: kills, deaths, purchases, objectives. Opt-in because it is
+# a layer over the reader rather than part of it, and costs a tick of retained state.
+events = []
+# Expose live world coordinates. Off by default: everything else this crate reads is
+# information the game already shows you, whereas positions are not.
+positions = []
+# Read every entity's modifier list into its player row. Off by default because it is the
+# one read here that dominates a tick rather than adding to it. Measured against a live
+# client at build 6683, release, three idle pawns in the Hideout: ~150 us without it and
+# ~300 us with. That is ~50 us per player, so a twelve-player match carries ~600 us of
+# modifier reads on top of the snapshot, and a hero mid-fight carries more modifiers than
+# an idle one. Reproduce with `cargo run --release -p deadlock-reader --example bench`,
+# with and without `--features modifiers`.
+#
+# `snapshot::read_modifiers` is available without the feature for callers that want one
+# entity rather than all of them.
+modifiers = []
+
+[lints]
+workspace = true
