@@ -1,0 +1,29 @@
+[package]
+name = "deadlock-walker"
+description = "Find live C++ protobuf objects in a running Deadlock client by RTTI and read them back as protobuf wire bytes"
+keywords = ["deadlock", "protobuf", "memory", "reverse-engineering"]
+categories = ["game-development", "os"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+deadlock-memory.workspace = true
+memchr.workspace = true
+prost.workspace = true
+# Decodes the descriptors embedded in the client into a pool. Same version valveprotos uses.
+prost-reflect = "0.16"
+# Only for `DESCRIPTOR_POOL`: field numbers and types come from the reflect pool.
+valveprotos.workspace = true
+
+[dev-dependencies]
+deadlock-memory = { workspace = true, features = ["mock"] }
+deadlock-reader.workspace = true
+# Test-only: gunzip the Statlocker cache fixture. Already in the lockfile via other crates.
+flate2 = "1"
+
+[lints]
+workspace = true
