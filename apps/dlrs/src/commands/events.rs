@@ -27,7 +27,7 @@ pub fn events() -> i32 {
     let mut engine = Engine::new()
         .with(ReaderSource::new(Arc::clone(&reader)).every(Duration::from_millis(100)));
 
-    // The party source needs the local account id to anchor its scan. Without it the
+    // The party source needs the local account id to pick out your objects. Without it the
     // match half still works, so this degrades rather than failing.
     match steam::active_account_id() {
         Ok(Some(account)) => {

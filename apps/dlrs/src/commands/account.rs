@@ -40,7 +40,7 @@ pub fn account() -> i32 {
     let account = match steam::active_account_id() {
         Ok(Some(id)) => id,
         Ok(None) => {
-            eprintln!("no Steam user is signed in; the scan anchors on your account id");
+            eprintln!("no Steam user is signed in; the search needs your account id");
             return 1;
         }
         Err(e) => {

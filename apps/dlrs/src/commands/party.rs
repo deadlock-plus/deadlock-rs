@@ -95,7 +95,7 @@ pub fn party() -> i32 {
     let account = match steam::active_account_id() {
         Ok(Some(id)) => id,
         Ok(None) => {
-            eprintln!("no Steam user is signed in; the scan anchors on your account id");
+            eprintln!("no Steam user is signed in; the search needs your account id");
             return 1;
         }
         Err(e) => {
@@ -126,7 +126,7 @@ pub fn party() -> i32 {
         }
     };
     outln!(
-        "swept {} regions, {} anchor hits, {} objects pinned in {:.1}s",
+        "swept {} regions, {} vtable hits, {} objects pinned in {:.1}s",
         report.regions,
         report.hits,
         report.pinned,
