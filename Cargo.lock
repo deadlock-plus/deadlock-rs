@@ -3296,6 +3296,7 @@ dependencies = [
 [[package]]
 name = "source2"
 version = "0.1.0"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=e89a4673a4e393af705ad32029139e37474cbbe6#e89a4673a4e393af705ad32029139e37474cbbe6"
 dependencies = [
  "source2-kv3",
  "source2-resource",
@@ -3305,6 +3306,7 @@ dependencies = [
 [[package]]
 name = "source2-kv3"
 version = "0.1.0"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=e89a4673a4e393af705ad32029139e37474cbbe6#e89a4673a4e393af705ad32029139e37474cbbe6"
 dependencies = [
  "lz4_flex",
  "ruzstd",
@@ -3314,10 +3316,12 @@ dependencies = [
 [[package]]
 name = "source2-resource"
 version = "0.1.0"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=e89a4673a4e393af705ad32029139e37474cbbe6#e89a4673a4e393af705ad32029139e37474cbbe6"
 
 [[package]]
 name = "source2-vpk"
 version = "0.1.0"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=e89a4673a4e393af705ad32029139e37474cbbe6#e89a4673a4e393af705ad32029139e37474cbbe6"
 
 [[package]]
 name = "stable_deref_trait"
