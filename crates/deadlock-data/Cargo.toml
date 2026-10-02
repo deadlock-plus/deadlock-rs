@@ -1,0 +1,53 @@
+[package]
+name = "deadlock-data"
+description = "Reference data for Deadlock: hero names and ids, from the installed game, a vendored snapshot, or deadlock-api.com"
+keywords = ["deadlock", "gamedev", "assets"]
+categories = ["game-development"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme = "README.md"
+
+[package.metadata.docs.rs]
+# docs.rs builds Linux + default features, which would hide the Windows backend and every
+# optional module. Document the lot.
+all-features = true
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+
+[dependencies]
+deadlock-core = { workspace = true }
+source2 = { workspace = true, optional = true, features = ["vpk", "resource", "kv3", "lz4", "zstd"] }
+serde = { workspace = true }
+serde_json.workspace = true
+ureq = { workspace = true, optional = true }
+
+[features]
+default = ["bundled", "client"]
+
+# Gates the `include_str!` of assets/*.json - about 205 KB of the compiled binary.
+bundled = []
+
+# The installed game's loose localisation files: display names in any of LANGUAGES, for
+# the cost of std alone. Names only - the roster lives behind `vpk`.
+client = []
+
+# The roster half of the client source: the game's own id tables, which live in compiled
+# `vdata_c` files inside the VPK archives. Separate from `client` because the cost is
+# different in kind - a VPK reader and a zstd decoder, against `client`'s zero
+# dependencies. Deadlock ships both codecs: `heroes` and `abilities` are zstd, the other
+# `scripts/*.vdata_c` are LZ4, so `source2` needs both.
+vpk = ["client", "dep:source2"]
+
+online = ["dep:ureq"]
+# Not `dep:serde`: this crate parses the vendored JSON with serde_json and the internal
+# `Raw` types derive `Deserialize` unconditionally, so the serde crate is mandatory here.
+# What this switches on is the `Serialize`/`Deserialize` impls for the *public* types, so
+# a consumer can send a catalogue to a frontend. Those impls name `HeroId` and `ItemId`,
+# hence the forward to `deadlock-core/serde`.
+serde = ["deadlock-core/serde"]
+
+[lints]
+workspace = true

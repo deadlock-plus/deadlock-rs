@@ -1,0 +1,28 @@
+[package]
+name = "deadlock-core"
+description = "Shared vocabulary types for reading Deadlock game state: hero ids, teams, game-state enums"
+keywords = ["deadlock", "source2", "gamedev"]
+categories = ["game-development"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme = "README.md"
+
+[package.metadata.docs.rs]
+# docs.rs builds Linux + default features, which would hide the Windows backend and every
+# optional module. Document the lot.
+all-features = true
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+
+[dependencies]
+serde = { workspace = true, optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[lints]
+workspace = true
