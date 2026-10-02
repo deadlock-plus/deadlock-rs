@@ -26,7 +26,7 @@ dlrs player [slot|hero]       full detail for one or all players
 dlrs items [substr|kind]      item / ability / weapon names (works offline)
 dlrs probe-schema             brute-force the schema layout offset
 dlrs fields                   print the baked fallback offset table
-dlrs regions                  committed RW regions (channel 2 scan surface)
+dlrs regions                  committed RW regions (the heap search surface)
 dlrs steam                    local Steam account id
 dlrs watch                    live scoreboard, refreshed 10x a second
 dlrs events                   stream kills, purchases and objectives as they happen

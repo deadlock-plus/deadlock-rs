@@ -1,19 +1,20 @@
 # deadlock-events
 
-A multi-source event engine for Deadlock. Each source polls on its own schedule; you get
-one merged stream.
+A multi-source event engine for Deadlock. Each source polls on its own schedule, and you
+get one merged stream.
 
 | Source | Reads | Poll cost | Sensible interval |
 |---|---|---|---|
 | `ReaderSource` | entity and schema systems | a few hundred microseconds | 50 to 100 ms |
-| `PartySource` | Game Coordinator shared objects | 2.6 us pinned, ~0.3 s to re-locate | 1 to 2 s |
-| `PostGameSource` | game phase, then the match metadata object | one snapshot per tick; a heap search per attempt | 500 ms |
+| `PartySource` | Game Coordinator objects, through the walker | a pinned re-read is cheap; locating the object searches the heap | 1 to 2 s |
+| `PostGameSource` | game phase, then the match metadata object | one snapshot per tick, plus a heap search per attempt | 500 ms |
 
 ## Why a thread per source
 
-A cold Game Coordinator sweep measured 1.2 seconds, and a finished match stays readable for
-only 12 to 19 seconds. On a shared thread one sweep could swallow the whole window and
-lose the final scoreboard, so the cadences have to be independent.
+The match source wants polling every 50 to 100 ms. Locating a Game Coordinator object
+searches the heap and takes far longer than that. A finished match is readable for only 12
+to 19 seconds. On a shared thread, one search could swallow the whole window and lose the
+final scoreboard, so each source needs its own cadence.
 
 ```rust,ignore
 let (_engine, rx) = Engine::new()
@@ -32,26 +33,36 @@ Dropping the handle stops every thread.
 ## Health is per source
 
 "No party is resident" and "the game closed" are different situations. `Health` is
-reported per source and only when it changes, so a healthy source is silent. `Health::Idle`
-is the ordinary state for solo play and is not an error.
+reported per source, and only when it changes, so a healthy source is silent.
+`Health::Idle` is the ordinary state for solo play and is not an error.
 
 ## Post-game capture
 
-`PostGameSource` captures each finished match's `CMsgMatchMetaDataContents` from the
-client's heap. When a real match enters `PostGame` it waits 5 s, then reads every 2 s until
-the metadata for that match is resident and complete, or 60 s pass. It emits exactly one
-`Event::PostGame` per match: `Captured { match_id, metadata }`, or `Missed { match_id,
-attempts }` if the deadline passes.
+`PostGameSource` reads each finished match's `CMsgMatchMetaDataContents` from the client's
+heap. When a real match enters `PostGame`, the source waits 5 s and then reads every 2 s
+for up to 60 s. It emits `Event::PostGame` with one of three outcomes:
 
-- The match id is remembered from while the match was live, since it can read zero after.
-- A flapping phase does not re-emit; a new match id re-arms; a game restart resets.
-- Street Brawl (`PostGame` straight to `GameInProgress`) and normal matches (via `End`)
-  both work: the window outlives the phase.
-- Only the match whose post-game screen is up is resident, so `Missed` is normal when the
-  player leaves the screen early.
-- Health is `Idle` with no window open, `Ok` while capturing, `Failed` on a poll error.
-- Timing is configurable with `PostGameSource::timing`. The policy itself is
-  `CapturePolicy`, a pure state machine with an injected clock and fetcher.
+- `Captured { match_id, metadata }` for the first complete copy.
+- `Updated { match_id, metadata }` for each later read that differs from the last emitted
+  copy. The source keeps reading until the 60 s are up, so a field the client fills in
+  late still reaches you.
+- `Missed { match_id, attempts }` if no complete copy turned up in time. A match gets
+  either one `Missed`, or one `Captured` and any number of `Updated`.
+
+Behaviour to know about:
+
+- The source remembers the match id from while the match was live, because the id can read
+  zero afterwards.
+- A phase that flaps back into `PostGame` does not open a second window. A new match id
+  opens a new one, and a game restart resets everything.
+- Street Brawl (`PostGame` straight to `GameInProgress`) and normal matches (through `End`)
+  both work, because the window outlives the phase.
+- The client holds only the match whose post-game screen is open, so `Missed` is normal
+  when the player leaves the screen early.
+- Health is `Idle` with no window open, `Ok` while a window is open, and `Failed` on a poll
+  error.
+- `PostGameSource::timing` sets the timing. `CapturePolicy` holds the logic as a state
+  machine with an injected clock and fetcher.
 
 ## Crowd control taken (`crowd-control` feature)
 

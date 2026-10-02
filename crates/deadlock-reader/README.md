@@ -359,9 +359,9 @@ Offline: 31 tests pass, including ground-truth cases in `deadlock-memory`'s `tes
 reproduce real instruction encodings from the original binary and assert the resolver
 lands on addresses confirmed by disassembly.
 
-**Not exercised:** the channel-2 GC protobuf decode and channel-3 replay CDN paths; the
-crate provides the region enumeration and URL construction for those, but no decoder.
-A full 12-player live match has not been observed, and Ranked / Street Brawl / custom
+**Not exercised:** the replay CDN path. The crate builds the URL but has no downloader or
+decoder; `deadlock-replay` reads the metadata file. Game Coordinator objects live in
+`deadlock-walker`. A full 12-player live match has not been observed, and Ranked / Street Brawl / custom
 lobby mode values come from the schema rather than from seeing them live.
 
 **The Linux backend has never run.** It compiles for `x86_64-unknown-linux-musl` and its

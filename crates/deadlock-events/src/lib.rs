@@ -1,28 +1,27 @@
 //! A multi-source event engine for Deadlock.
 //!
-//! Two very different things are worth watching, and they cannot share a schedule:
+//! The sources poll at different rates, so each runs on its own schedule:
 //!
 //! | Source | Reads | Poll cost | Sensible interval |
 //! |---|---|---|---|
 //! | [`ReaderSource`] | entity and schema systems | a few hundred microseconds | 50 to 100 ms |
-//! | [`PartySource`] | Game Coordinator shared objects | 2.6 us pinned, ~0.3 s to re-locate | 1 to 2 s |
-//! | [`PostGameSource`] | game phase, then the match metadata object | one snapshot per tick; a heap search per attempt | 500 ms |
+//! | [`PartySource`] | Game Coordinator objects, through the walker | a pinned re-read is cheap; locating the object searches the heap | 1 to 2 s |
+//! | [`PostGameSource`] | game phase, then the match metadata object | one snapshot per tick, plus a heap search per attempt | 500 ms |
 //!
 //! # Why each source gets its own thread
 //!
-//! This is not a stylistic choice. A cold Game Coordinator sweep measured **1.2 seconds**,
-//! against a match source that wants polling every **50 to 100 ms**, and a finished match
-//! stays readable for only **12 to 19 seconds**. On a shared thread a sweep swallows a
-//! dozen match ticks, and a slower machine or a larger heap eats further into the window
-//! in which the final scoreboard can still be read. The cadences have to be genuinely
-//! independent.
+//! The match source wants polling every 50 to 100 ms. Locating a Game Coordinator object
+//! searches the heap and takes far longer than that. A finished match is readable for only
+//! 12 to 19 seconds. On a shared thread, one search would swallow many match ticks and eat
+//! into the window in which the final scoreboard can still be read. Each source needs its
+//! own cadence.
 //!
 //! # Health is per source
 //!
 //! "No party is resident" and "the game closed" are different situations, and a consumer
-//! usually wants to act differently on them. [`Health`] is reported per source and only
-//! when it changes, so a healthy source is silent. Note that [`Health::Idle`] is the
-//! ordinary state for solo play and is not an error.
+//! usually wants to act differently on each. [`Health`] is reported per source, and only
+//! when it changes, so a healthy source is silent. [`Health::Idle`] is the ordinary state
+//! for solo play and is not an error.
 //!
 //! ```no_run
 //! use std::sync::Arc;
@@ -59,14 +58,15 @@
 //!
 //! # Post-game capture
 //!
-//! [`PostGameSource`] captures each finished match's `CMsgMatchMetaDataContents` from the
-//! client's heap. The client only holds it once the post-game screen is up, and only for
-//! the match being shown, so the source waits [`DEFAULT_FIRST_ATTEMPT_DELAY`] after
-//! `PostGame`, retries every [`postgame::DEFAULT_RETRY_INTERVAL`] and gives up after
-//! [`DEFAULT_DEADLINE`]. It emits a [`PostGameEvent::Captured`] for the first complete copy,
-//! a [`PostGameEvent::Updated`] whenever a later read differs, or a single
-//! [`PostGameEvent::Missed`] so a consumer is not left waiting. The policy is a pure state
-//! machine, [`CapturePolicy`], driven by an injected clock and fetcher.
+//! [`PostGameSource`] reads each finished match's `CMsgMatchMetaDataContents` from the
+//! client's heap. The client holds it only once the post-game screen is open, and only for
+//! the match on that screen. The source waits [`DEFAULT_FIRST_ATTEMPT_DELAY`] after
+//! `PostGame`, reads again every [`postgame::DEFAULT_RETRY_INTERVAL`], and stops after
+//! [`DEFAULT_DEADLINE`]. It emits [`PostGameEvent::Captured`] for the first complete copy
+//! and [`PostGameEvent::Updated`] for each later read that differs. If it never sees a
+//! complete copy, it emits one [`PostGameEvent::Missed`] so a consumer is not left waiting.
+//! [`CapturePolicy`] holds the timing logic as a state machine with an injected clock and
+//! fetcher, so it runs under test without a game.
 //!
 //! # Derived metrics
 //!

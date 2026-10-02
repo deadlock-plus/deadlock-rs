@@ -4,9 +4,9 @@ A reference for how a running Deadlock client lays out the state this crate read
 Source 2 schema system, the entity system, the game-rules enums, the Game Coordinator
 objects that sit in the heap, and the replay metadata published after a match.
 
-It is also the provenance record for every constant `deadlock-memory` depends on — where
-each number came from, how it is re-verified against the live runtime schema, and which
-ones drift with a game build.
+It is also the provenance record for every constant `deadlock-reader` depends on. It says
+where each number came from, how it is re-verified against the live runtime schema, and
+which ones drift with a game build.
 
 Nothing here is a build artefact of the reader. Offsets that the game exposes through its
 own reflection data are resolved at attach and are *not* baked in; the tables below are
@@ -22,7 +22,7 @@ mechanism and a different window of availability.
 | Source | Available when | Mechanism |
 |---|---|---|
 | Live entity state | In a match, or in the Hideout | Source 2 schema-driven reads of `deadlock.exe`'s `client.dll` |
-| Lobby / party / account | Client running, in or out of a match | Search of committed read-write regions for resident GC protobuf |
+| Lobby, party, account, post-game metadata | Client running, in or out of a match | `deadlock-walker` finds live Game Coordinator protobuf objects in the heap by RTTI vtable |
 | Historical / post-match | After a match | Replay salts → Valve replay CDN |
 
 The first is §4–§6, the second §7, the third §8.
@@ -43,8 +43,8 @@ a Deadlock patch instead of breaking on it.
 
 **Measured against a live client.** The schema system's and entity system's *own* struct
 layouts are not in the schema — nothing reflects the reflection — so
-`SchemaLayout::DEADLOCK` (`crates/deadlock-memory/src/schema.rs:132`) and
-`EntityLayout::DEADLOCK` (`crates/deadlock-memory/src/entity.rs:82`) were derived by
+`SchemaLayout::DEADLOCK` (`crates/deadlock-reader/src/schema.rs`) and
+`EntityLayout::DEADLOCK` (`crates/deadlock-reader/src/entity.rs`) were derived by
 structural search against a running game: for each candidate offset, follow the pointer
 and score whether it lands on something whose name field reads back plausibly, or whose
 instance pointer carries a vtable inside `client.dll`. `cargo run --example probe`
@@ -52,7 +52,7 @@ re-derives all of them and prints `ok` or `MISMATCH` against what the crate assu
 
 **Baked fallbacks.** The `(class, field, fallback)` table in §5 is used only when a schema
 lookup misses. It is baselined against **build 6723** (`VersionDate=Sep 30 2026`), re-probed
-from a live client. Two `#[ignore]`d live tests in `crates/deadlock-memory/src/fields.rs`
+from a live client. Two `#[ignore]`d live tests in `crates/deadlock-reader/src/fields.rs`
 keep it honest: every row must name a field the schema has, and every fallback must equal
 the live offset.
 
@@ -91,7 +91,7 @@ modules and regions, which replaces `VirtualQueryEx` *and* the Toolhelp32 snapsh
    offsets and struct layouts depend on how the *target* was compiled, not on the host, so
    a Linux host reading a Proton-hosted game needs the Windows tables — Wine maps the real
    PE and the game code is still MSVC-compiled x86-64
-   (`crates/deadlock-memory/src/abi.rs`).
+   (`crates/deadlock-reader/src/abi.rs`).
 
 Under Proton, three details matter: pid discovery must go through `/proc/<pid>/cmdline`
 rather than `comm` (truncated to 15 bytes) and prefer the process with a client module
@@ -107,7 +107,7 @@ The game build id is not a memory read at all: it comes from `steam.inf` in the 
 The whole `client.dll` image (about 60 MiB) is copied into a local buffer before any
 scanning, in **1 MiB** chunks, retrying a failed chunk in **4 KiB** pages so that a handful
 of unreadable pages does not abort the scan
-(`mem::IMAGE_CHUNK` / `mem::IMAGE_RETRY_CHUNK`, `crates/deadlock-memory/src/mem.rs:51`).
+(`mem::IMAGE_CHUNK` / `mem::IMAGE_RETRY_CHUNK`, `crates/deadlock-memory/src/mem.rs`).
 
 This copy dominates attach cost — roughly 270 ms all told, with the schema walk. After that
 a tick is ~135 µs.
@@ -151,7 +151,7 @@ The `schema_system` anchor targets the *store* where `client.dll` caches the
 `CSchemaSystem*` it received from the interface factory, so `schemasystem.dll` never has to
 be opened or scanned.
 
-The descriptors live in `crates/deadlock-memory/src/globals.rs`, grouped in a
+The descriptors live in `crates/deadlock-reader/src/globals.rs`, grouped in a
 `SignatureSet` per ABI rather than a flat slice, so each pattern stays bound to the global
 it resolves; matching by name at the call site would be a silent-failure hazard.
 
@@ -169,7 +169,7 @@ global_va = module_base + match_off + instr_len + disp32
 The displacement is signed: a negative one must sign-extend, not wrap through `u32`. A
 resolved address outside `[module_base, module_base + module_size)` is rejected as a bad
 match rather than trusted (`sig::scan_and_resolve`,
-`crates/deadlock-memory/src/sig.rs:166`).
+`crates/deadlock-memory/src/sig.rs`).
 
 These are addresses *of the variables*, not of what they point to. Each needs a further
 read to dereference.
@@ -200,7 +200,7 @@ Three properties are easy to get wrong:
 - **Merge order is load-bearing.** 2637 class names exist in *both* the `client.dll` and
   `server.dll` scopes, with different offsets. A client process must be read with
   `client.dll`'s numbers, so the walk sorts that scope to the front and keeps the first
-  binding for a name (`schema::PRIORITY_SCOPE`, `crates/deadlock-memory/src/schema.rs:210`).
+  binding for a name (`schema::PRIORITY_SCOPE`, `crates/deadlock-reader/src/schema.rs`).
   Left unordered, `server.dll` silently wins.
 - **A class binding lists only the fields declared directly on it.**
   `CCitadelPlayerController` owns `m_PlayerDataGlobal`; `m_iTeamNum` and `m_iHealth` live up
@@ -251,9 +251,9 @@ the element size; walking by anything smaller reads the next element's prologue.
 
 ## 5. Class and field reference
 
-73 `(class, field)` pairs, the set `deadlock-memory` looks up by name
-(`crates/deadlock-memory/src/fields.rs`). `fallback` is used **only** when the runtime
-schema lookup misses; `-` means there is none and the read is skipped instead. Fallbacks
+73 `(class, field)` pairs, the set `deadlock-reader` looks up by name
+(`crates/deadlock-reader/src/fields.rs`). `fallback` is used only when the runtime
+schema lookup misses. `-` means there is none and the read is skipped instead. Fallbacks
 are build-specific and drift with every Deadlock build — always prefer a resolved schema
 offset.
 
@@ -284,7 +284,7 @@ name: `m_eMatchMode`, `m_eGameMode`, `m_bGamePaused`, `m_nPauseStartTick`,
 `m_iWinningTeam`, `m_tNextMidBossSpawnTime`, `m_flGameStateStartTime`,
 `m_flGameStateEndTime`, `m_flMatchClockAtLastUpdate`, `m_nMatchClockUpdateTick`, the KOTH
 timers and the two rejuvenator gold counters
-(`snapshot::RULES_FIELDS`, `crates/deadlock-memory/src/snapshot/mod.rs:52`). They are
+(`snapshot::RULES_FIELDS`, `crates/deadlock-reader/src/snapshot/mod.rs`). They are
 fetched in one bulk read that the snapshot, the clock and the objective timers share.
 
 `m_bServerPaused` alone is not sufficient: it was observed *not* flipping during a real
@@ -476,7 +476,7 @@ watches the flag turn on and stamps the clock itself.
 The `imul rcx, rax, 0x130` inside the `entity_identity_list` signature is **not**
 `sizeof(CEntityIdentity)`. Candidate strides were scored against a live client on whether
 the resulting instance pointers carry vtables inside `client.dll`
-(`crates/deadlock-memory/src/entity.rs:11`):
+(`crates/deadlock-reader/src/entity.rs`):
 
 ```text
 stride 0x060:  39/512 slots valid
@@ -532,7 +532,7 @@ A `CHandle`'s low 15 bits are the entity index: `HANDLE_INDEX_MASK = 0x7FFF`.
 The structure/creep split matters: a live match holds roughly 340 creeps against 20
 structures, so a list that lumps them together is not an objective list. `objectives` is
 structures only (`entity::STRUCTURE_CLASSES`,
-`crates/deadlock-memory/src/entity.rs:558`); creeps stay reachable through `entities()`.
+`crates/deadlock-reader/src/entity.rs`); creeps stay reachable through `entities()`.
 
 These names are compared against an entity's own class name and never used to look up a
 field, so a misspelling resolves to nothing and the objective silently never appears — which
@@ -589,7 +589,7 @@ m_unMatchID  = 0                    m_eGameMode  = 0 (Invalid)
 
 which is indistinguishable from a half-initialised match on those fields alone. The reliable
 signal is entity presence — these classes exist only on the Hideout map
-(`tunables::DEFAULT_HIDEOUT_CLASSES`, `crates/deadlock-memory/src/tunables.rs:101`):
+(`tunables::DEFAULT_HIDEOUT_CLASSES`, `crates/deadlock-reader/src/tunables.rs`):
 
 ```text
 C_CitadelTriggerHideout          C_Citadel_Hideout_Ball
@@ -607,13 +607,13 @@ Street Brawl has its own markers: `C_CitadelGameRules::m_tStreetBrawl` and
 ## 7. Game Coordinator objects in the heap
 
 Party, lobby, friends and account data are matchmaking state, not world state, so nothing
-in §4–§6 reaches them (§1). What the client does keep is the Steam Game Coordinator's shared
-objects, sitting in the heap as serialized protobuf.
+in §4 to §6 reaches them (§1). The client keeps the Steam Game Coordinator's shared objects
+in the heap as live C++ protobuf messages. It does not keep them as serialised wire bytes.
 
 ### 7.1 Region filter
 
-There is no pointer to follow and no table to index, so the scan surface is every committed
-read-write region of the target (`crates/deadlock-memory/src/region.rs`):
+No pointer leads to these objects and no table indexes them, so the search surface is every
+committed read-write region of the target (`crates/deadlock-memory/src/region.rs`):
 
 ```text
 addr = 0x10000                                   region::SCAN_START
@@ -640,62 +640,67 @@ at a time to find the contiguous readable spans.
 
 ### 7.2 Finding and validating objects
 
-The anchor is the **local account id encoded as a protobuf varint**, because every party
-member record carries one. A full sweep read **15.2 GiB** on a live client and takes about a
-second, so it is the last resort in a four-speed design: pinned re-read (microseconds) →
-probe of remembered addresses (microseconds) → rescan of those addresses' regions (~50 ms) →
-cold sweep (~1.0 s). Most of a sweep is the search, not the reads; SIMD substring search
-over the region set runs about 16 GiB/s across eight threads against 0.57 GiB/s for a
-byte-at-a-time scan.
+`deadlock-walker` finds each object in four steps.
 
-Object kinds recognised, in the order a candidate is tested — most specific shape first,
-because the order is load-bearing (the walker's `GcSession`):
+1. **Vtable.** It reads the type descriptor from the client's RTTI, follows it to the
+   complete-object locator, and from there to the message class's vtable.
+2. **Heap search.** Every 8-aligned qword in the readable regions that equals the vtable is
+   an instance. The loaded modules are excluded, because statically allocated default
+   instances carry the same vtable as real objects.
+3. **Layout.** Field offsets and has-bits come from the protobuf-cpp 3.21 `DescriptorTable`
+   compiled into `client.dll`: its `MigrationSchema`, its `offsets[]`, and its default
+   instances. Field numbers and types come from the embedded descriptors. The tables list
+   fields in declaration order, not number order. A scalar `RepeatedField` pointer points at
+   element 0.
+4. **Walk.** The walker writes the object out as wire bytes, and `prost` decodes them into
+   the `valveprotos` message.
+
+A heap search reads every writable region and takes about a second on a live client. Polling
+cannot afford that, so `GcSession` tries the cheapest step first:
+
+| Step | Cost | When |
+|---|---|---|
+| Re-read pinned objects | microseconds | every call |
+| Probe remembered addresses | microseconds | after a pin died |
+| Search the regions those addresses sit in | tens of ms | after a pin died, rate limited |
+| Search the whole heap | about a second | no object known, rate limited |
+
+A pin is only an address. The client frees and reuses memory, so each re-read checks the
+vtable before and after the walk. It drops the pin when the object is gone or no longer
+walks. An object can also be freed in the middle of a walk, so a read that comes back
+empty is retried and is not treated as an error.
+
+A vtable hit is a live object of that class, but not necessarily the wanted one. The client
+holds copies, caches and other accounts' objects. Each kind therefore also has to name the
+local account: a party lists it as a member, and a hero build is authored by it. Every copy
+that passes is returned.
 
 | Kind | Message |
 |---|---|
 | Party | `CSOCitadelParty` |
-| HideoutLobby | `CSOCitadelHideoutLobby` |
-| AccountStats | `CMsgAccountStats` |
-| HeroBuild | `CMsgHeroBuild` |
-| GameAccount | `CSOGameAccountClient` |
 | Lobby | `CSOCitadelLobby` |
-| AccountHeroInfo | `CSOAccountHeroInfo` |
+| Hideout | `CSOCitadelHideoutLobby` |
+| GameAccount | `CSOGameAccountClient` |
+| AccountStats | `CMsgAccountStats` |
+| AccountHeroes | `CSOAccountHeroInfo` |
+| HeroBuilds | `CMsgHeroBuild` |
+| PostGameProgress | `CMsgPostGameProgressData` |
+| MatchMetaData | `CMsgMatchMetaDataContents` |
 
-The collisions that fix that order are real: a fresh account with all-zero counters
-satisfies a lobby's enum bounds and both its booleans; a hero with few wins puts small
-numbers where a lobby's enums go, and a client holds one hero-info object *per hero*; a
-hideout's `hideout_lobby_id` reads as a `lobby_id`, its `party_id` as a `match_id`, and its
-`compat_version` fits `server_state`'s enum bound.
+Match metadata is the exception to the account rule. The client holds one object per match
+the player has opened, and none of them names an account. A copy counts when it is
+complete, meaning a non-zero match id and at least one player. `GcSession::match_metadata`
+picks among the pinned copies by match id on each call. A match the player has not opened
+is not resident, and the call returns `None`.
 
-`CMsgMatchMetaData` is a separate, unanchored entry point, because it carries no account id
-for the anchor to reach:
+The Game Coordinator never sends this message. `CMsgClientToGCGetMatchMetaDataResponse`
+carries a `metadata_salt`, a `replay_salt` and validity stamps, but no metadata. The client
+builds the object itself at match end. It is resident only while the client holds it.
 
-```text
-version       = 1, varint
-match_details = 2, bytes    // a separately serialised CMsgMatchMetaDataContents
-match_id      = 3, varint   // 64-bit MatchID_t
-```
-
-A bare shape scan for `{ varint = 1, bytes = 2 }` is worthless — a heap is full of that
-shape. What makes this one sound is that `match_details` is a *separately serialised*
-message, so a real candidate survives being parsed as protobuf twice: `match_details`
-decodes end to end; that message has no field 1 and a length-delimited field 2
-(`CMsgMatchMetaDataContents` declares exactly `match_info = 2`); and that field's payload
-decodes cleanly as a message too. On top of that, the wrapper's `match_id` repeated inside
-`match_info` (field 6) is two independent copies of the same number.
-
-Measured 2026-08-21 against a client idling in the Hideout: 5758 regions, 10.65 GiB read in
-1.4 s, 3439 offsets past the byte prefilter, 371 candidates passing the wire shape, and
-**zero** surviving nested validation. Absence is a plausible steady state, and the protos
-say why: the Game Coordinator never sends this message.
-`CMsgClientToGCGetMatchMetaDataResponse` carries a `metadata_salt`, a `replay_salt` and
-validity stamps — no metadata — and the wrapper itself is fetched from the replay CDN. One
-is resident only while the client is holding metadata it downloaded and decompressed.
-
-**The honest caveat.** An entity pin can be validated against a `CEntityHandle` serial. A
-protobuf blob has nothing like that, so validation here is structural, and a shared object
-is likely reallocated when it changes rather than updated in place. The pin probably dies on
-exactly the event you wanted to detect, and the change is not visible until the next sweep.
+A pinned read cannot be checked against a serial the way an entity handle can. The vtable
+check and the completeness check catch a freed or reused object, but a shared object may be
+reallocated when it changes. The old pin then dies on the very change you wanted to see,
+and the next search finds the new object.
 
 ### 7.3 Local Steam account id
 
@@ -719,7 +724,7 @@ Deadlock's Steam AppID is **1422450**. When a match ends, Valve publishes its
 http://replay{cluster_id}.valve.net/1422450/{match_id}_{metadata_salt}.meta.bz2
 ```
 
-`deadlock_memory::replay_meta_url` builds it (`crates/deadlock-memory/src/lib.rs:148`).
+`deadlock_reader::replay_meta_url` builds it (`crates/deadlock-reader/src/lib.rs`).
 `match_id` comes from `C_CitadelGameRulesProxy → m_pGameRules → m_unMatchID`; the
 `cluster_id`, `metadata_salt` and `replay_salt` come from the GC side (§7.2), where the
 client receives them in `CMsgClientToGCGetMatchMetaDataResponse`.
@@ -744,6 +749,11 @@ at a time rather than loaded.
 If a signature stops matching, that pattern has drifted and needs re-deriving against
 `client.dll`. If only the schema walk fails, the reader keeps working on the baked fallback
 table at reduced coverage.
+
+The walker reads its layouts from the client's own protobuf tables, so a patch that changes
+a Game Coordinator message does not need a code change. A patch that changes the table
+format or the RTTI layout does. `dlrs party` and `dlrs account` are the quick check that the
+walker still reads a live client.
 
 Constants the game never exposes to the client — the bridge-buff cadence, the tick rate, the
 entity class names matched by string — cannot be re-derived at runtime. They live in
