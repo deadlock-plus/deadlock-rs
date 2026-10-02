@@ -1,8 +1,8 @@
 /target
 
 # Per-crate licence copies are NOT ignored: each published package has to carry the full
-# text, and the `package` CI job fails if one does not. Regenerate them with:
-#   for d in crates/*/; do cp LICENSE.md "$d/LICENSE.md"; done
+# texts, and the `package` CI job fails if one does not. Regenerate them with:
+#   for d in crates/*/; do cp LICENSE-MIT LICENSE-APACHE "$d"; done
 
 .claude/scheduled_tasks.lock
 

@@ -228,7 +228,5 @@ Each crate's README covers its own internals. Two more files cover the reader:
 
 ## Licence
 
-LGPL-3.0-or-later. See [LICENSE.md](LICENSE.md).
-
-The LGPL is a copyleft licence. You must release modifications to this library under the
-same terms. An application that only uses it does not have to be released under them.
+Licensed under either of the Apache License, Version 2.0 ([`LICENSE-APACHE`](LICENSE-APACHE))
+or the MIT license ([`LICENSE-MIT`](LICENSE-MIT)), at your option.

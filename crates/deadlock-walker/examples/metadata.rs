@@ -65,9 +65,8 @@ fn trimmed(mut m: Meta) -> Meta {
 }
 
 fn saved_capture(id: u64) -> Option<Meta> {
-    let path = format!(
-        r"C:\Users\user\AppData\Local\statlocker-companion\metadata_cache\match_{id}.pb.gz"
-    );
+    let base = std::env::var("LOCALAPPDATA").ok()?;
+    let path = format!(r"{base}\statlocker-companion\metadata_cache\match_{id}.pb.gz");
     let gz = std::fs::read(path).ok()?;
     let mut raw = Vec::new();
     flate2::read::GzDecoder::new(&gz[..])

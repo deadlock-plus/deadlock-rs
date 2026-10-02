@@ -107,8 +107,9 @@ fn main() {
 /// The Statlocker cache copy of the match, if it exists on this machine.
 fn saved_capture(id: Option<u64>) -> Option<valveprotos::deadlock::CMsgMatchMetaDataContents> {
     use std::io::Read;
+    let base = std::env::var("LOCALAPPDATA").ok()?;
     let path = format!(
-        r"C:\Users\user\AppData\Local\statlocker-companion\metadata_cache\match_{}.pb.gz",
+        r"{base}\statlocker-companion\metadata_cache\match_{}.pb.gz",
         id?
     );
     let gz = std::fs::read(path).ok()?;

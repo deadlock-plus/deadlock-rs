@@ -54,23 +54,28 @@ fn library_crates(root: &Path) -> Vec<String> {
     out
 }
 
-/// Every library crate ships its own licence text.
+/// The licence texts every library crate ships.
+const LICENCE_FILES: [&str; 2] = ["LICENSE-MIT", "LICENSE-APACHE"];
+
+/// Every library crate ships its own licence texts.
 ///
-/// The workspace is LGPL-3.0-or-later and each crate is published separately, so a crate
-/// without `LICENSE.md` would publish without its terms. This is what `deadlock-vpk`
+/// The workspace is `MIT OR Apache-2.0` and each crate is published separately, so a crate
+/// without both files would publish without its terms. This is what `deadlock-vpk`
 /// failed at the time nothing was checking it.
 #[test]
 fn every_library_crate_carries_its_licence() {
     let root = workspace_root();
-    let missing: Vec<&String> = library_crates(&root)
+    let missing: Vec<String> = library_crates(&root)
         .iter()
-        .filter(|c| !root.join("crates").join(c).join("LICENSE.md").is_file())
-        .cloned()
-        .collect::<Vec<String>>()
-        .leak()
-        .iter()
+        .flat_map(|c| {
+            let dir = root.join("crates").join(c);
+            LICENCE_FILES
+                .iter()
+                .filter(move |f| !dir.join(f).is_file())
+                .map(move |f| format!("{c}/{f}"))
+        })
         .collect();
-    assert!(missing.is_empty(), "crates without LICENSE.md: {missing:?}");
+    assert!(missing.is_empty(), "missing licence files: {missing:?}");
 }
 
 /// Every library crate appears in **both** CI jobs that name crates individually.

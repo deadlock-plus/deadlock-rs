@@ -41,7 +41,5 @@ Read-only: every subcommand only observes the game process.
 Not published to crates.io. It is an application over the `deadlock-*` crates, not part of
 the library surface.
 
-Licence: LGPL-3.0-or-later. See [LICENSE.md](https://github.com/deadlock-plus/deadlock-rs/blob/main/LICENSE.md).
-
-The LGPL is a copyleft licence. Modifications to this library must be released
-under the same terms; an application that merely uses it need not be.
+Licence: MIT or Apache-2.0, at your option. See [LICENSE-MIT](https://github.com/deadlock-plus/deadlock-rs/blob/main/LICENSE-MIT)
+and [LICENSE-APACHE](https://github.com/deadlock-plus/deadlock-rs/blob/main/LICENSE-APACHE).

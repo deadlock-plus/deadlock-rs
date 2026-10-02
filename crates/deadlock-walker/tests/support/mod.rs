@@ -692,10 +692,12 @@ fn compute_layout(msg: &MessageSchema) -> MessageLayout {
 /// `DEADLOCK_WALKER_FIXTURE`.
 pub fn statlocker_fixture() -> Option<Vec<u8>> {
     use std::io::Read;
-    let path = std::env::var("DEADLOCK_WALKER_FIXTURE").unwrap_or_else(|_| {
-        r"C:\Users\user\AppData\Local\statlocker-companion\metadata_cache\match_109598353.pb.gz"
-            .to_string()
-    });
+    let path = std::env::var("DEADLOCK_WALKER_FIXTURE").ok().or_else(|| {
+        let base = std::env::var("LOCALAPPDATA").ok()?;
+        Some(format!(
+            r"{base}\statlocker-companion\metadata_cache\match_109598353.pb.gz"
+        ))
+    })?;
     let gz = std::fs::read(path).ok()?;
     let mut out = Vec::new();
     flate2::read::GzDecoder::new(&gz[..])

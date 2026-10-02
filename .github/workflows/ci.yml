@@ -126,7 +126,7 @@ jobs:
       - run: cargo install cargo-audit --locked
       - run: cargo audit --deny warnings
 
-  # A root-level LICENSE.md does not reach the packages, so each published crate keeps a
+  # The root licence files do not reach the packages, so each published crate keeps a
   # copy. `apps/` is excluded: those are `publish = false`.
   package:
     name: package
@@ -141,9 +141,12 @@ jobs:
           set -euo pipefail
           for c in deadlock-core deadlock-memory deadlock-reader \
                    deadlock-events deadlock-data deadlock-replay deadlock-walker; do
-            if ! cargo package -p "$c" --list --allow-dirty | grep -q '^LICENSE.md$'; then
-              echo "::error::$c would publish without its licence text"
-              exit 1
-            fi
+            files=$(cargo package -p "$c" --list --allow-dirty)
+            for f in LICENSE-MIT LICENSE-APACHE; do
+              if ! grep -qx "$f" <<<"$files"; then
+                echo "::error::$c would publish without $f"
+                exit 1
+              fi
+            done
           done
-          echo "all packages carry LICENSE.md"
+          echo "all packages carry LICENSE-MIT and LICENSE-APACHE"
