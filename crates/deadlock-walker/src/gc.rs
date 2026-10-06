@@ -15,7 +15,18 @@
 //! | re-read pinned objects | microseconds | every call |
 //! | probe remembered addresses | microseconds | after a pin died |
 //! | search the regions those addresses sit in | tens of ms | after a pin died, rate limited |
+//! | search the regions other kinds sit in | tens of ms | kind never seen, rate limited |
 //! | search the whole heap | about a second | no object known, rate limited |
+//!
+//! The client allocates its Game Coordinator objects from one heap, so a party that has
+//! just appeared is usually in a region that already holds the account object. The
+//! neighbour step finds it there within [`DEFAULT_NEIGHBOUR_INTERVAL`], where only the
+//! whole-heap step would find it, once every [`DEFAULT_SWEEP_INTERVAL`]. A whole-heap sweep
+//! looks for every kind that has nothing pinned at once, since the read dominates its cost.
+//!
+//! The heap search sees only what [`MemoryReader::regions`] lists. A backend that drops
+//! very large regions hides every object that lives in one, and the kinds that live there
+//! read as absent; see the live checks in the crate README.
 //!
 //! A pin is only an address. Memory is freed and reused, so every re-read checks the vtable
 //! before and after the walk and drops the pin when the object is gone or does not walk.
@@ -70,6 +81,12 @@ pub const LOST_SWEEP_INTERVAL: Duration = Duration::from_secs(1);
 
 /// How long the faster post-loss sweep cadence lasts.
 pub const LOST_GRACE: Duration = Duration::from_secs(30);
+
+/// How often the regions around other kinds of object may be searched for a missing one.
+///
+/// Looks at a few regions instead of the whole heap, so it can run far more often than a
+/// sweep and is what notices an object that has just appeared.
+pub const DEFAULT_NEIGHBOUR_INTERVAL: Duration = Duration::from_secs(1);
 
 /// How many past locations are remembered per kind.
 pub const MAX_HINTS: usize = 8;
@@ -273,6 +290,7 @@ struct KindState {
     swept_at: Option<Instant>,
     lost_at: Option<Instant>,
     refound_at: Option<Instant>,
+    neighboured_at: Option<Instant>,
 }
 
 /// Finds Game Coordinator objects and keeps their addresses between polls.
@@ -297,6 +315,7 @@ pub struct GcSession {
     seq: u64,
     sweep_interval: Duration,
     refind_interval: Duration,
+    neighbour_interval: Duration,
     sweeps: u64,
     reuses: u64,
 }
@@ -338,6 +357,7 @@ impl GcSession {
             seq: 0,
             sweep_interval: DEFAULT_SWEEP_INTERVAL,
             refind_interval: DEFAULT_REFIND_INTERVAL,
+            neighbour_interval: DEFAULT_NEIGHBOUR_INTERVAL,
             sweeps: 0,
             reuses: 0,
         })
@@ -355,6 +375,14 @@ impl GcSession {
     #[must_use]
     pub fn refind_every(mut self, interval: Duration) -> Self {
         self.refind_interval = interval;
+        self
+    }
+
+    /// Set how often the regions around other kinds of object may be searched for a kind
+    /// that has no known location. Pass [`Duration::ZERO`] to search on every miss.
+    #[must_use]
+    pub fn neighbours_every(mut self, interval: Duration) -> Self {
+        self.neighbour_interval = interval;
         self
     }
 
@@ -624,8 +652,18 @@ impl GcSession {
             }
         }
 
+        if self.may_neighbour(kind) {
+            self.search_neighbours(mem, kind, vtable);
+            found = self.reread::<M>(mem, vtable, extent);
+            if satisfied(&found) {
+                self.settle(kind, Tier::Found);
+                return Ok(found);
+            }
+        }
+
         if self.may_sweep(kind) {
-            self.sweep_kinds(mem, &[kind])?;
+            let kinds = self.sweepable_with(kind);
+            self.sweep_kinds(mem, &kinds)?;
             found = self.reread::<M>(mem, vtable, extent);
             if !found.is_empty() {
                 tier = Tier::Found;
@@ -742,6 +780,46 @@ impl GcSession {
         self.add_pins(kind, &hits[0]);
     }
 
+    /// Search the regions where other kinds of object live.
+    ///
+    /// The client allocates its Game Coordinator objects from the same heap, so one that
+    /// has just appeared is usually beside the ones already known. A few regions cost tens
+    /// of milliseconds where the whole heap costs about a second.
+    fn search_neighbours(&mut self, mem: &dyn MemoryReader, kind: Kind, vtable: u64) {
+        self.state_mut(kind).neighboured_at = Some(Instant::now());
+        let mut regions: Vec<Region> = Vec::new();
+        for other in Kind::ALL.into_iter().filter(|&k| k != kind) {
+            for &addr in &self.state(other).hot {
+                if let Some(r) = mem.region_at(addr)
+                    && !regions.iter().any(|x| x.base == r.base)
+                {
+                    regions.push(r);
+                }
+            }
+        }
+        if regions.is_empty() {
+            return;
+        }
+        let hits = find_in(mem, &regions, &[vtable], &self.search);
+        self.add_pins(kind, &hits[0]);
+    }
+
+    /// `kind` plus every other kind that has nothing pinned and may be swept now.
+    ///
+    /// A sweep reads the whole heap whatever it looks for, and looking for more vtables
+    /// adds little, so a cold start pays for one sweep instead of one per kind.
+    fn sweepable_with(&self, kind: Kind) -> Vec<Kind> {
+        Kind::ALL
+            .into_iter()
+            .filter(|&k| {
+                k == kind
+                    || (self.state(k).pins.is_empty()
+                        && self.state(k).vtable.is_some()
+                        && self.may_sweep(k))
+            })
+            .collect()
+    }
+
     fn sweep_kinds(&mut self, mem: &dyn MemoryReader, kinds: &[Kind]) -> Result<SweepReport> {
         let wanted: Vec<(Kind, u64)> = kinds
             .iter()
@@ -841,6 +919,16 @@ impl GcSession {
         self.state(kind)
             .swept_at
             .is_none_or(|t| t.elapsed() >= interval)
+    }
+
+    fn may_neighbour(&self, kind: Kind) -> bool {
+        Kind::ALL
+            .into_iter()
+            .any(|k| k != kind && !self.state(k).hot.is_empty())
+            && self
+                .state(kind)
+                .neighboured_at
+                .is_none_or(|t| t.elapsed() >= self.neighbour_interval)
     }
 
     fn may_refind(&self, kind: Kind) -> bool {

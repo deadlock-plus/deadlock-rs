@@ -22,7 +22,9 @@ pub struct SearchConfig {
 impl Default for SearchConfig {
     fn default() -> Self {
         SearchConfig {
-            chunk: 4 * 1024 * 1024,
+            // Reading a live process is copy-bound; a buffer that stays in cache between the
+            // copy and the scan measured about 15% faster than 4 MiB.
+            chunk: 1024 * 1024,
             exclude: Vec::new(),
             limit: 4096,
         }

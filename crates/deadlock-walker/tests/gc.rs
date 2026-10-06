@@ -66,6 +66,7 @@ fn session(w: &World) -> GcSession {
         .unwrap()
         .every(Duration::from_secs(3600))
         .refind_every(Duration::ZERO)
+        .neighbours_every(Duration::ZERO)
 }
 
 fn kill(w: &mut World, obj: u64) {
@@ -669,4 +670,67 @@ fn a_missing_match_does_not_sweep_again_within_the_interval() {
 fn the_metadata_kind_names_its_message() {
     assert_eq!(Kind::MatchMetaData.message(), META);
     assert!(Kind::ALL.contains(&Kind::MatchMetaData));
+}
+
+fn account_wire(id: u32) -> Vec<u8> {
+    CsoGameAccountClient {
+        account_id: Some(id),
+        wins: Some(1),
+        ..Default::default()
+    }
+    .encode_to_vec()
+}
+
+#[test]
+fn a_party_that_appears_beside_known_objects_is_found_without_a_heap_sweep() {
+    let mut w = world();
+    w.build(ACCOUNT, &account_wire(ME));
+    let mut s = session(&w);
+    assert!(s.game_account(&w.mem).unwrap().is_some());
+    assert_eq!(s.party(&w.mem).unwrap(), None);
+    assert_eq!(s.stats().0, 1);
+
+    w.build(PARTY, &party(7, vec![member(ME, "me")]).encode_to_vec());
+    assert!(s.party(&w.mem).unwrap().is_some());
+    assert_eq!(
+        s.stats().0,
+        1,
+        "found in the account's region, not by a sweep"
+    );
+}
+
+/// Whether a party built after the first miss is found on the next read.
+fn late_party_is_found(neighbour_interval: Duration) -> bool {
+    let mut w = world();
+    w.build(ACCOUNT, &account_wire(ME));
+    let mut s = session(&w).neighbours_every(neighbour_interval);
+    s.game_account(&w.mem).unwrap();
+    assert_eq!(s.party(&w.mem).unwrap(), None);
+    w.build(PARTY, &party(7, vec![member(ME, "me")]).encode_to_vec());
+    s.party(&w.mem).unwrap().is_some()
+}
+
+#[test]
+fn the_neighbour_search_is_rate_limited() {
+    assert!(late_party_is_found(Duration::ZERO));
+    assert!(!late_party_is_found(Duration::from_secs(3600)));
+}
+
+#[test]
+fn one_sweep_serves_every_kind_that_has_no_pin() {
+    let mut w = world();
+    w.build(ACCOUNT, &account_wire(ME));
+    w.build(
+        HEROES,
+        &CsoAccountHeroInfo {
+            account_id: Some(ME),
+            hero_id: Some(1),
+            ..Default::default()
+        }
+        .encode_to_vec(),
+    );
+    let mut s = session(&w);
+    assert!(s.game_account(&w.mem).unwrap().is_some());
+    assert_eq!(s.account_heroes(&w.mem).unwrap().len(), 1);
+    assert_eq!(s.stats().0, 1);
 }

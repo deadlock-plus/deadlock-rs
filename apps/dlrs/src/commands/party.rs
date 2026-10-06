@@ -205,7 +205,14 @@ pub fn party() -> i32 {
         Ok(None) => {
             outln!("");
             outln!("no party object resident.");
-            outln!("that is the normal answer when playing solo without having made a party.");
+            // The account object exists whenever the client is signed in to the Game
+            // Coordinator, so missing it too means the search is not reaching the heap.
+            if matches!(gc.game_account(r.memory()), Ok(None)) {
+                outln!("your account object was not found either: the heap search is likely");
+                outln!("missing memory, so this does not show whether you are in a party.");
+            } else {
+                outln!("expected when not in a party and not queueing.");
+            }
             0
         }
         Err(e) => {
