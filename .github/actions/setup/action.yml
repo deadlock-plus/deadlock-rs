@@ -1,0 +1,38 @@
+name: Build prerequisites
+description: protoc for the generated protobuf crates, and a stub frontend so the overlay's Tauri build script finds its assets
+
+runs:
+  using: composite
+  steps:
+    - name: Install protoc (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev
+
+    - name: Install protoc (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: brew install protobuf
+
+    - name: Install protoc (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $v = '36.0'
+        $zip = Join-Path $env:RUNNER_TEMP 'protoc.zip'
+        Invoke-WebRequest "https://github.com/protocolbuffers/protobuf/releases/download/v$v/protoc-$v-win64.zip" -OutFile $zip
+        if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne '510FB2369A4720ADB457783768C5E1481A0E1137D9E7694478DFE9B8FE445DC1') { throw 'protoc checksum mismatch' }
+        $dir = Join-Path $env:RUNNER_TEMP 'protoc'
+        Expand-Archive $zip $dir
+        "PROTOC=$dir\bin\protoc.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+        "PROTOC_INCLUDE=$dir\include" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+    # `tauri-build` fails when `frontendDist` is missing, and the SvelteKit build is not part
+    # of CI. An empty page is enough to compile and test the Rust side.
+    - name: Stub the overlay frontend
+      shell: bash
+      run: |
+        mkdir -p apps/overlay/build
+        test -f apps/overlay/build/index.html || echo '<!doctype html>' > apps/overlay/build/index.html
