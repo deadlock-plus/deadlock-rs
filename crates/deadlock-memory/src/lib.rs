@@ -22,6 +22,7 @@
 //!
 //! Tests that need no live process can use `mock::MockMemory`, behind the `mock` feature.
 
+pub mod attach;
 pub mod error;
 pub mod mem;
 /// Test scaffolding, behind the `mock` feature.
@@ -40,6 +41,9 @@ pub mod sig;
 /// Linux [`mem::MemoryReader`] backend, covering Proton-hosted and native clients.
 #[cfg(target_os = "linux")]
 pub mod linux;
+/// macOS [`mem::MemoryReader`] backend, for a Windows build running under Wine.
+#[cfg(target_os = "macos")]
+pub mod macos;
 /// Windows [`mem::MemoryReader`] backend.
 #[cfg(windows)]
 pub mod process;
@@ -56,7 +60,7 @@ pub mod process;
 /// other.
 ///
 /// The returned reader is boxed so callers never name the concrete backend.
-#[cfg(any(windows, target_os = "linux"))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 pub fn attach_process(exe_name: &str) -> Result<Box<dyn MemoryReader>> {
     #[cfg(windows)]
     {
@@ -65,6 +69,10 @@ pub fn attach_process(exe_name: &str) -> Result<Box<dyn MemoryReader>> {
     #[cfg(target_os = "linux")]
     {
         Ok(Box::new(linux::LinuxProcess::attach(exe_name)?))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Ok(Box::new(macos::MacProcess::attach(exe_name)?))
     }
 }
 

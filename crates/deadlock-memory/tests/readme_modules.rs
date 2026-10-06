@@ -39,14 +39,15 @@ fn the_readme_layout_table_lists_every_public_module() {
 ///
 /// This crate reads another process's memory, so it cannot forbid `unsafe` outright. What
 /// it can do is keep the exception where the OS puts it: `ReadProcessMemory` and
-/// `VirtualQueryEx` on Windows, `process_vm_readv` on Linux. An `unsafe` appearing anywhere
+/// `VirtualQueryEx` on Windows, `process_vm_readv` on Linux, Mach `mach_vm_read_overwrite` on
+/// macOS. An `unsafe` appearing anywhere
 /// else means that boundary has moved, and moving it is a decision worth making on purpose.
 ///
 /// Matched on `unsafe {`, `unsafe fn` and `unsafe impl` rather than the bare word, because
 /// prose is not code.
 #[test]
 fn unsafe_stays_at_the_operating_system_boundary() {
-    const AT_THE_BOUNDARY: [&str; 2] = ["process.rs", "linux.rs"];
+    const AT_THE_BOUNDARY: [&str; 3] = ["process.rs", "linux.rs", "macos.rs"];
 
     let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut stack = vec![src];

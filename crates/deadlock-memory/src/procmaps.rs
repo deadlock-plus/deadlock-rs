@@ -12,6 +12,14 @@ use std::path::PathBuf;
 use crate::mem::{Module, Region};
 use crate::region::MAX_REGION;
 
+/// The kernel appends this to the path of a mapping whose file has been unlinked or
+/// replaced, which a launcher updating the game in place produces.
+const DELETED_SUFFIX: &str = " (deleted)";
+
+fn strip_deleted(path: &str) -> &str {
+    path.strip_suffix(DELETED_SUFFIX).unwrap_or(path)
+}
+
 /// One line of `/proc/<pid>/maps`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MapEntry {
@@ -64,7 +72,7 @@ impl MapEntry {
 
     /// File name component of the backing path.
     pub fn file_name(&self) -> Option<&str> {
-        let p = self.path.as_deref()?;
+        let p = strip_deleted(self.path.as_deref()?);
         if !p.starts_with('/') {
             return None;
         }
@@ -122,6 +130,14 @@ pub fn parse_maps(text: &str) -> Vec<MapEntry> {
     out
 }
 
+/// [`parse_maps`] for raw file bytes.
+///
+/// Mapped paths are arbitrary bytes on Linux, so a strict UTF-8 read of the file would fail
+/// the whole parse over one oddly named library. Invalid sequences become U+FFFD instead.
+pub fn parse_maps_bytes(bytes: &[u8]) -> Vec<MapEntry> {
+    parse_maps(&String::from_utf8_lossy(bytes))
+}
+
 /// Group file-backed mappings into modules.
 ///
 /// A PE or ELF image occupies several consecutive VMAs with different protections; the
@@ -139,7 +155,7 @@ pub fn modules_from_maps(entries: &[MapEntry]) -> Vec<Module> {
         if !e.is_file_backed() {
             continue;
         }
-        let Some(path) = e.path.as_deref() else {
+        let Some(path) = e.path.as_deref().map(strip_deleted) else {
             continue;
         };
         let span = by_path.entry(path).or_insert((e.start, e.end));
@@ -245,6 +261,13 @@ ffffffffff600000-ffffffffff601000 --xp 00000000 00:00 0 [vsyscall]
     }
 
     #[test]
+    fn a_gibibyte_mapping_is_kept() {
+        let big = "100000000000-100040000000 rw-p 00000000 00:00 0 
+";
+        assert_eq!(regions_from_maps(&parse_maps(big)).len(), 1);
+    }
+
+    #[test]
     fn oversized_regions_are_skipped() {
         let huge = format!(
             "100000000000-{:x} rw-p 00000000 00:00 0 \n",
@@ -282,5 +305,41 @@ ffffffffff600000-ffffffffff601000 --xp 00000000 00:00 0 [vsyscall]
         let mods = modules_from_maps(&parse_maps(text));
         assert_eq!(mods.len(), 1);
         assert_eq!(mods[0].size, 0x2000);
+        assert_eq!(mods[0].name, "client.dll");
+        assert_eq!(mods[0].path, PathBuf::from("/tmp/client.dll"));
+    }
+
+    #[test]
+    fn a_replaced_file_and_its_live_twin_are_one_module() {
+        let text = "00400000-00401000 r--p 00000000 08:02 1 /g/client.dll (deleted)
+00401000-00402000 rw-p 00001000 08:02 2 /g/client.dll
+";
+        let mods = modules_from_maps(&parse_maps(text));
+        assert_eq!(mods.len(), 1);
+        assert_eq!(mods[0].size, 0x2000);
+    }
+
+    #[test]
+    fn non_utf8_maps_text_still_parses_through_the_lossy_entry_point() {
+        let mut bytes = b"00400000-00401000 r--p 00000000 08:02 1 /g/".to_vec();
+        bytes.extend_from_slice(&[0xff, 0xfe]);
+        bytes.extend_from_slice(
+            b"/client.dll
+00401000-00402000 rw-p 00000000 00:00 0
+",
+        );
+        let e = parse_maps_bytes(&bytes);
+        assert_eq!(e.len(), 2);
+        assert_eq!(e[0].file_name(), Some("client.dll"));
+    }
+
+    #[test]
+    fn anonymous_mappings_with_extra_padding_parse() {
+        let text = "7f0000000000-7f0000021000 rw-p 00000000 00:00 0                          [heap]
+";
+        let e = parse_maps(text);
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].path.as_deref(), Some("[heap]"));
+        assert_eq!(e[0].inode, 0);
     }
 }

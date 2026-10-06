@@ -20,8 +20,9 @@ pub const PAGE_WRITECOPY: u32 = 0x08;
 /// `PAGE_GUARD`.
 pub const PAGE_GUARD: u32 = 0x100;
 
-/// Regions larger than this are skipped, .
-pub const MAX_REGION: usize = 0x800_0000; // 128 MiB
+/// Regions larger than this are skipped. The Game Coordinator objects sit in mapped regions of
+/// up to 1 GiB, so the cap must stay above that.
+pub const MAX_REGION: usize = 0x8000_0000; // 2 GiB
 
 /// Scanning starts here; below this is the null-pointer guard region.
 pub const SCAN_START: u64 = 0x1_0000;
@@ -302,6 +303,11 @@ mod tests {
             MAX_REGION + 1
         ));
         assert!(accepts(MEM_COMMIT, PAGE_READWRITE, MEM_PRIVATE, MAX_REGION));
+    }
+
+    #[test]
+    fn accepts_a_gibibyte_region() {
+        assert!(accepts(MEM_COMMIT, PAGE_READWRITE, MEM_MAPPED, 1 << 30));
     }
 
     use crate::mock::MockMemory;

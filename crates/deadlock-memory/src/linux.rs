@@ -8,15 +8,14 @@
 //!
 //! Under Proton the game is the ordinary Windows build: Wine maps the real PE honouring
 //! `SectionAlignment`, so `client.dll` appears in `maps` and every signature, offset and
-//! layout constant transfers unchanged. [`crate::abi::Abi::detect`] confirms this from
-//! the `MZ` magic rather than assuming it.
+//! layout constant transfers unchanged.
 //!
 //! Three things to know:
 //!
 //! * A Proton prefix runs several wine processes (`steam.exe`, `services.exe`,
 //!   `explorer.exe`). [`crate::linux::LinuxProcess::find_pid`] matches on
-//!   `/proc/<pid>/cmdline`, not
-//!   `comm`, which is truncated to 15 bytes.
+//!   `/proc/<pid>/cmdline` first and falls back to `comm` (truncated to 15 bytes by the
+//!   kernel) only when that does not name the game.
 //! * pressure-vessel gives the game its own mount namespace, so paths in `maps` are
 //!   container-relative. Module lookup is therefore by basename.
 //! * Run the reader on the host, not inside the container, and PID-namespace
@@ -32,6 +31,7 @@
 use std::ffi::c_void;
 use std::fs;
 
+use crate::attach;
 use crate::error::{Error, Result};
 use crate::mem::{MemoryReader, Module, Region};
 use crate::procmaps;
@@ -61,17 +61,7 @@ pub fn ptrace_scope() -> Option<u8> {
 
 /// Advice to print when a read is refused.
 pub fn permission_hint() -> String {
-    let scope = ptrace_scope();
-    let scope_line = match scope {
-        Some(0) => "ptrace_scope is 0, so this is probably a uid mismatch: the game runs as another user.".to_string(),
-        Some(n) => format!("/proc/sys/kernel/yama/ptrace_scope is {n} (only descendants may be read)."),
-        None => "Yama does not appear to be enabled; this may be a uid mismatch or a container boundary.".to_string(),
-    };
-    format!(
-        "{scope_line}\n  Fix one of:\n    \
-         sudo setcap cap_sys_ptrace+ep <this binary>   # per-binary, preferred\n    \
-         sudo sysctl -w kernel.yama.ptrace_scope=0     # session-wide, resets on reboot"
-    )
+    attach::permission_hint_for(ptrace_scope())
 }
 
 /// How many mapped regions [`LinuxProcess::open`] will probe before concluding that reads
@@ -79,13 +69,14 @@ pub fn permission_hint() -> String {
 const PROBE_ATTEMPTS: usize = 4;
 
 impl LinuxProcess {
-    /// Find a pid whose `cmdline` names `exe_name`.
+    /// Find the pid of the process running `exe_name`.
     ///
-    /// Matches the basename of `argv[0]` so it works for both a native `deadlock` and a
-    /// Proton-hosted `.../drive_c/.../deadlock.exe`. Wine paths use backslashes, so both
-    /// separators are honoured.
+    /// Matches `argv[0]` (either path separator, since Wine paths use backslashes) and the
+    /// kernel `comm`. A Proton launch leaves several processes whose command line carries
+    /// the game's path, so the one with the client module mapped wins, and a bare launcher
+    /// is never chosen. See [`attach::pick_pid`].
     pub fn find_pid(exe_name: &str) -> Option<u32> {
-        let mut best = None;
+        let mut candidates = Vec::new();
         for entry in fs::read_dir("/proc").ok()? {
             let Ok(entry) = entry else { continue };
             let Some(pid) = entry
@@ -95,32 +86,22 @@ impl LinuxProcess {
             else {
                 continue;
             };
-            let Ok(cmdline) = fs::read(entry.path().join("cmdline")) else {
+            let dir = entry.path();
+            let cmdline = fs::read(dir.join("cmdline")).unwrap_or_default();
+            let comm = fs::read_to_string(dir.join("comm")).ok();
+            let Some(kind) = attach::match_cmdline(&cmdline, comm.as_deref(), exe_name) else {
                 continue;
             };
-            // cmdline is NUL-separated; argv[0] is what we want.
-            let argv0 = cmdline.split(|&b| b == 0).next().unwrap_or_default();
-            let Ok(argv0) = std::str::from_utf8(argv0) else {
-                continue;
-            };
-            let base = argv0
-                .rsplit(['/', '\\'])
-                .next()
-                .unwrap_or(argv0)
-                .trim_end_matches('\u{0}');
-            if base.eq_ignore_ascii_case(exe_name) {
-                // Prefer a process that actually has the client module mapped; a Proton
-                // prefix can briefly show more than one match.
-                let looks_real = fs::read_to_string(entry.path().join("maps"))
-                    .map(|m| m.contains("client.dll") || m.contains("client.so"))
-                    .unwrap_or(false);
-                if looks_real {
-                    return Some(pid);
-                }
-                best.get_or_insert(pid);
-            }
+            let has_client_module = fs::read(dir.join("maps"))
+                .map(|m| attach::maps_mention_client(&String::from_utf8_lossy(&m)))
+                .unwrap_or(false);
+            candidates.push(attach::Candidate {
+                pid,
+                kind,
+                has_client_module,
+            });
         }
-        best
+        attach::pick_pid(&candidates)
     }
 
     /// Attach by pid, verifying it is readable.
@@ -129,9 +110,10 @@ impl LinuxProcess {
     /// they look like fields that will not resolve.
     pub fn open(pid: u32) -> Result<Self> {
         let me = LinuxProcess { pid };
-        let maps = fs::read_to_string(format!("/proc/{pid}/maps"))
-            .map_err(|_| Error::ProcessNotFound(format!("pid {pid}")))?;
-        let entries = procmaps::parse_maps(&maps);
+        let entries = me.maps().map_err(|e| match e {
+            Error::ProcessGone { .. } => Error::ProcessNotFound(format!("pid {pid}")),
+            other => other,
+        })?;
 
         // Several regions, not one. A single zero-byte read is ambiguous: it means
         // `process_vm_readv` was refused, or it means that one region was unmapped between
@@ -173,9 +155,10 @@ impl LinuxProcess {
     }
 
     fn maps(&self) -> Result<Vec<procmaps::MapEntry>> {
-        let text = fs::read_to_string(format!("/proc/{}/maps", self.pid))
-            .map_err(|_| Error::ProcessNotFound(format!("pid {}", self.pid)))?;
-        Ok(procmaps::parse_maps(&text))
+        let bytes = fs::read(format!("/proc/{}/maps", self.pid)).map_err(|e| {
+            attach::linux_maps_error(self.pid, e.raw_os_error().unwrap_or(0), ptrace_scope())
+        })?;
+        Ok(procmaps::parse_maps_bytes(&bytes))
     }
 
     fn vm_readv(&self, addr: u64, buf: &mut [u8]) -> isize {
@@ -205,19 +188,14 @@ impl MemoryReader for LinuxProcess {
         }
         let n = self.vm_readv(addr, buf);
         if n < 0 {
-            let err = std::io::Error::last_os_error();
-            let os = err.raw_os_error().unwrap_or(0) as u32;
-            if err.raw_os_error() == Some(libc::EPERM) {
-                return Err(Error::PtraceDenied {
-                    pid: self.pid,
-                    hint: permission_hint(),
-                });
-            }
-            return Err(Error::ReadMemory {
+            let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+            return Err(attach::linux_read_error(
+                self.pid,
                 addr,
-                len: buf.len(),
-                os,
-            });
+                buf.len(),
+                errno,
+                ptrace_scope(),
+            ));
         }
         if n as usize != buf.len() {
             return Err(Error::ShortRead {

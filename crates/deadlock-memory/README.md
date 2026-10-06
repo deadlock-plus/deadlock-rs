@@ -24,7 +24,13 @@ for module in process.modules()? {
 ```
 
 `attach_process` picks the backend for the platform: `ReadProcessMemory` on Windows,
-`process_vm_readv` on Linux, which also reads a Proton-hosted Windows process.
+`process_vm_readv` on Linux, which also reads a Proton-hosted Windows process, and the Mach
+task port (`mach_vm_read_overwrite`) on macOS, for a Windows build under Wine. The macOS
+backend is best effort: it compiles, but has not been run against a real process, and
+`task_for_pid` needs root.
+
+On Linux, Yama's `ptrace_scope` decides whether another process may be read. A refused read
+is reported as `Error::PtraceDenied` with advice matched to the current setting.
 
 ## Layout
 
@@ -33,7 +39,9 @@ for module in process.modules()? {
 | `mem` | `MemoryReader` trait: the whole OS surface, four required methods |
 | `mock` | In-memory backend for tests, on any platform (`mock` feature) |
 | `procmaps` | `/proc/<pid>/maps` parsing (pure, tested everywhere) |
+| `attach` | Process choice and OS-error mapping, shared by the backends (pure, tested everywhere) |
 | `linux` | Linux backend: `process_vm_readv` + `/proc/<pid>/maps` |
+| `macos` | macOS backend: Mach task port + `proc_regionfilename` (best effort) |
 | `process` | Windows backend: `ReadProcessMemory` + `VirtualQueryEx` |
 | `region` | Committed RW region filter and region scanning |
 | `sig` | AOB pattern engine + RIP-relative resolution (pure, no OS deps) |

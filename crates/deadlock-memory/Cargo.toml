@@ -15,7 +15,7 @@ readme = "README.md"
 # docs.rs builds Linux + default features, which would hide the Windows backend and the
 # mock. Document the lot.
 all-features = true
-targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
 
 [dependencies]
 memchr.workspace = true
