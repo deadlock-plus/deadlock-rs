@@ -148,6 +148,9 @@ mod off {
     // snapshot reads the whole rules object in one go now, sized from the schema; if that
     // sizing regressed to a fixed cap this field would silently read as absent.
     pub const SAPPHIRE_REJUV: u32 = 0x1500;
+    pub const NOT_SCORED: u32 = 0x240;
+    pub const EXPECTED_PLAYERS: u32 = 0x244;
+    pub const DONT_UPLOAD: u32 = 0x248;
     // CCitadelPlayerController
     pub const CTRL_TEAM: u32 = 0x300;
     pub const LOBBY_SLOT: u32 = 0x304;
@@ -216,6 +219,9 @@ fn build_schema(f: &mut Fixture) -> Vec<(String, u64)> {
             ("m_tNextMidBossSpawnTime", off::MIDBOSS_SPAWN),
             ("m_iAmberRejuvCount", off::AMBER_REJUV),
             ("m_iSapphireRejuvCount", off::SAPPHIRE_REJUV),
+            ("m_bMatchNotScored", off::NOT_SCORED),
+            ("m_unExpectedPlayerCount", off::EXPECTED_PLAYERS),
+            ("m_bDontUploadStats", off::DONT_UPLOAD),
         ],
     );
     add("C_CitadelGameRules", rules, &mut out);
@@ -891,4 +897,180 @@ fn build_minimal_match(f: &mut Fixture) -> (u64, u64) {
         }],
     );
     (entity_system, rules)
+}
+
+/// A rules proxy that is absent means the client is loading, which is not the same answer
+/// as a missing game.
+#[test]
+fn a_client_with_no_game_rules_is_loading_not_absent() {
+    use deadlock_reader::snapshot::LiveState;
+
+    let mut f = Fixture::new();
+    let classes = build_schema(&mut f);
+    let schema_system = build_schema_system(&mut f, &classes);
+    let lone = f.alloc(INSTANCE_SIZE);
+    let entity_system = build_entity_system(
+        &mut f,
+        &[Ent {
+            class: "C_CitadelTeam",
+            instance: lone,
+        }],
+    );
+    let r = into_reader(f, entity_system, schema_system);
+
+    match r.live_state().expect("a read, not a failure") {
+        LiveState::Loading(l) => assert_eq!(l.entity_count, 1),
+        other => panic!("expected Loading, got {other:?}"),
+    }
+    assert!(
+        r.live_snapshot().unwrap().is_none(),
+        "the old call is unchanged"
+    );
+}
+
+#[test]
+fn a_client_with_game_rules_is_live() {
+    let r = synthetic_match();
+    let state = r.live_state().expect("read");
+    assert!(!state.is_loading());
+    let snap = state.into_snapshot().expect("a snapshot");
+    assert_eq!(snap.match_id, Some(98_098_971));
+}
+
+/// A rules proxy plus extra entities of the given classes, with no match id.
+fn offline_client(extra: &[&'static str]) -> Reader {
+    let mut f = Fixture::new();
+    let classes = build_schema(&mut f);
+    let schema_system = build_schema_system(&mut f, &classes);
+
+    let rules = f.alloc(INSTANCE_SIZE);
+    f.poke_u32(rules, off::GAME_STATE as u64, 7);
+    let proxy = f.alloc(INSTANCE_SIZE);
+    f.poke_u64(proxy, off::P_GAME_RULES as u64, rules);
+
+    let mut ents = vec![Ent {
+        class: "C_CitadelGameRulesProxy",
+        instance: proxy,
+    }];
+    for class in extra {
+        let instance = f.alloc(INSTANCE_SIZE);
+        ents.push(Ent { class, instance });
+    }
+    let entity_system = build_entity_system(&mut f, &ents);
+    into_reader(f, entity_system, schema_system)
+}
+
+#[test]
+fn the_sandbox_is_read_off_the_entities_it_loads() {
+    use deadlock_reader::snapshot::Context;
+
+    let r = offline_client(&[
+        "CCitadelHideoutTeleportTrigger",
+        "CCitadelTunnelTrigger",
+        "CCitadel_ShopProp",
+    ]);
+    let s = r.live_snapshot().unwrap().unwrap();
+    assert_eq!(s.match_id, None);
+    assert_eq!(s.context, Context::Sandbox);
+}
+
+#[test]
+fn explore_nyc_is_read_off_the_entities_it_loads() {
+    use deadlock_reader::snapshot::Context;
+
+    let r = offline_client(&["CCitadelTriggerCapturePoint", "C_NPC_BarrackBoss"]);
+    let s = r.live_snapshot().unwrap().unwrap();
+    assert_eq!(s.context, Context::ExploreNyc);
+}
+
+#[test]
+fn a_retuned_class_list_changes_what_counts_as_the_sandbox() {
+    use deadlock_reader::snapshot::Context;
+
+    let mut r = offline_client(&["CSandboxOnlyNextPatch"]);
+    assert_eq!(r.live_snapshot().unwrap().unwrap().context, Context::Other);
+    r.tunables_mut().sandbox_classes = vec!["CSandboxOnlyNextPatch".to_string()];
+    assert_eq!(
+        r.live_snapshot().unwrap().unwrap().context,
+        Context::Sandbox
+    );
+}
+
+#[test]
+fn the_hero_menu_shows_up_as_a_snapshot_fact() {
+    let mut extra = vec!["C_PointCamera"; 14];
+    extra.push("C_PortraitWorldUnit");
+    let s = offline_client(&extra).live_snapshot().unwrap().unwrap();
+    assert!(s.menu.hero_menu_open && s.menu.menu_open);
+    assert_eq!((s.menu.portrait_units, s.menu.point_cameras), (1, 14));
+
+    let quiet = offline_client(&["C_PointCamera"; 6])
+        .live_snapshot()
+        .unwrap()
+        .unwrap();
+    assert!(!quiet.menu.menu_open && !quiet.menu.hero_menu_open);
+}
+
+#[test]
+fn bots_are_flagged_and_humans_are_not() {
+    let mut f = Fixture::new();
+    let classes = build_schema(&mut f);
+    let schema_system = build_schema_system(&mut f, &classes);
+    let (_, rules) = build_minimal_match(&mut f);
+    let proxy = f.alloc(INSTANCE_SIZE);
+    f.poke_u64(proxy, off::P_GAME_RULES as u64, rules);
+
+    let mut ents = vec![Ent {
+        class: "C_CitadelGameRulesProxy",
+        instance: proxy,
+    }];
+    for (name, steam) in [("Bot3", 0u64), ("Bot4", 0), ("Bot5", 7_600_009)] {
+        let c = f.alloc(INSTANCE_SIZE);
+        f.poke_u8(c, off::CTRL_TEAM as u64, 2);
+        f.poke_u64(c, off::STEAM_ID as u64, steam);
+        f.poke(c, off::PLAYER_NAME as u64, name.as_bytes());
+        ents.push(Ent {
+            class: "CCitadelPlayerController",
+            instance: c,
+        });
+    }
+    let entity_system = build_entity_system(&mut f, &ents);
+    let r = into_reader(f, entity_system, schema_system);
+
+    let s = r.live_snapshot().unwrap().unwrap();
+    let flag = |name: &str| {
+        s.players
+            .iter()
+            .find(|p| p.name.as_deref() == Some(name))
+            .map(|p| p.is_bot)
+    };
+    assert_eq!(flag("Bot3"), Some(true));
+    assert_eq!(flag("Bot4"), Some(true));
+    assert_eq!(flag("Bot5"), Some(false), "a Steam id makes it a person");
+}
+
+#[test]
+fn the_rules_flags_are_exposed_on_the_snapshot() {
+    let mut f = Fixture::new();
+    let classes = build_schema(&mut f);
+    let schema_system = build_schema_system(&mut f, &classes);
+    let (entity_system, rules) = build_minimal_match(&mut f);
+    f.poke_u8(rules, off::NOT_SCORED as u64, 1);
+    f.poke_u32(rules, off::EXPECTED_PLAYERS as u64, 12);
+    f.poke_u8(rules, off::DONT_UPLOAD as u64, 1);
+    let r = into_reader(f, entity_system, schema_system);
+
+    let s = r.live_snapshot().unwrap().unwrap();
+    assert_eq!(s.match_not_scored, Some(true));
+    assert_eq!(s.expected_player_count, Some(12));
+    assert_eq!(s.dont_upload_stats, Some(true));
+}
+
+#[test]
+fn unset_rules_flags_read_as_false_and_zero_not_absent() {
+    let r = synthetic_match();
+    let s = r.live_snapshot().unwrap().unwrap();
+    assert_eq!(s.match_not_scored, Some(false));
+    assert_eq!(s.dont_upload_stats, Some(false));
+    assert_eq!(s.expected_player_count, Some(0));
 }

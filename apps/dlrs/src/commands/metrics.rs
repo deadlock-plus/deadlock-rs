@@ -481,7 +481,7 @@ impl RunStats {
         match snap.context {
             Context::Hideout => self.hideout_ticks += 1,
             Context::Match => self.match_ticks += 1,
-            Context::Other => self.other_ticks += 1,
+            _ => self.other_ticks += 1,
         }
         if let Some(id) = snap.match_id {
             self.match_ids.insert(id);
@@ -644,7 +644,9 @@ fn context_name(c: Context) -> &'static str {
     match c {
         Context::Hideout => "hideout",
         Context::Match => "match",
-        Context::Other => "other",
+        Context::Sandbox => "sandbox",
+        Context::ExploreNyc => "explore_nyc",
+        _ => "other",
     }
 }
 

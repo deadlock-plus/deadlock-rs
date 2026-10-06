@@ -106,6 +106,10 @@ impl<'a> PinSet<'a> {
             &tunables.midboss_classes,
             &tunables.urn_classes,
             &tunables.hideout_classes,
+            &tunables.sandbox_classes,
+            &tunables.explore_nyc_classes,
+            &tunables.portrait_unit_classes,
+            &tunables.point_camera_classes,
             &tunables.clock_source_classes,
         ] {
             named.extend(list.iter().map(String::as_str));
@@ -295,6 +299,19 @@ mod tests {
             is_pinned("C_CitadelTriggerHideout", &t),
             "hideout detection"
         );
+    }
+
+    #[test]
+    fn offline_map_and_menu_markers_are_pinned() {
+        let t = Tunables::default();
+        for class in [
+            "CCitadelTunnelTrigger",
+            "CCitadelTriggerCapturePoint",
+            "C_PortraitWorldUnit",
+            "C_PointCamera",
+        ] {
+            assert!(is_pinned(class, &t), "{class} would be dropped");
+        }
     }
 
     #[allow(clippy::field_reassign_with_default)]

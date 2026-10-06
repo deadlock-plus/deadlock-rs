@@ -593,9 +593,31 @@ signal is entity presence — these classes exist only on the Hideout map
 
 ```text
 C_CitadelTriggerHideout          C_Citadel_Hideout_Ball
-C_Citadel_Hideout_Clock          CCitadelHideoutTeleportTrigger
+C_Citadel_Hideout_Clock          CCitadelHideoutInterestPoint
 CCitadelHideoutInteractableProp  C_NPC_Neutral_Hideout_Cat
 ```
+
+`CCitadelHideoutTeleportTrigger` is not on the list: the Sandbox loads one too.
+
+### 6.5.1 Offline maps and menus
+
+`m_eGameMode` stays `Invalid` on the Sandbox and Explore NYC, so `Context::Sandbox` and
+`Context::ExploreNyc` come from entity classes, with no match id and no Hideout classes
+(`tunables::DEFAULT_SANDBOX_CLASSES`, `DEFAULT_EXPLORE_NYC_CLASSES`; observed on one build,
+not checked across patches). A class set both lists claim stays `Context::Other`.
+
+The hero menu spawns one `C_PortraitWorldUnit`; the play-mode screen and the hero menu both
+raise the `C_PointCamera` count from 6 to 14. `LiveSnapshot::menu` carries the counts and
+two flags derived from them. `EGameState::HeroSelection` is defined and never used by the
+client: picking a hero is a UI menu opened before queueing.
+
+`C_CitadelGameRules::m_bMatchNotScored`, `m_bDontUploadStats` and `m_unExpectedPlayerCount`
+are read onto the snapshot. `m_bSpawnedBots` and `m_szQuestName` exist only on the
+server-side `CCitadelGameRules` / `CGameRules` classes, not the client's `C_CitadelGameRules`,
+so there is nothing to read.
+
+Between maps the game-rules entity is gone for 3-26 seconds. `Reader::live_state()` reports
+that as `LiveState::Loading`, where `live_snapshot()` answers `Ok(None)`.
 
 `C_CitadelGameRules::m_nHideoutOwner` exists but read back as `0` in a solo Hideout, so it
 is not sufficient on its own. A Hideout client reports no match id rather than match id
@@ -623,7 +645,7 @@ while (addr >> 16) < 0x7FFFFFFF:                 region::SCAN_END_SHIFTED
         Type    == MEM_PRIVATE (0x20000) or MEM_MAPPED (0x40000)
         Protect & (PAGE_READWRITE|PAGE_WRITECOPY) != 0     i.e. & 0x0C
         Protect & (PAGE_NOACCESS|PAGE_GUARD)      == 0     i.e. & 0x101 clear
-        RegionSize <= 0x8000000                            region::MAX_REGION, 128 MiB
+        RegionSize <= 0x80000000                           region::MAX_REGION, 2 GiB
 ```
 
 Rejecting guard pages is not only about readability: touching one would perturb the target.

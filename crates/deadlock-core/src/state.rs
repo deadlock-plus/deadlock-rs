@@ -98,6 +98,12 @@ raw_enum! {
         /// Lobby filling.
         WaitingForPlayersToJoin = 2 => "WaitingForPlayersToJoin",
         /// Hero pick phase.
+        ///
+        /// The game defines it and does not use it. Picking a hero is a UI menu opened
+        /// before queueing, and a live client never reports this value for it. It was seen
+        /// for a single tick while the Hideout loaded, which is not a signal. Do not map
+        /// it to a "hero select" screen, and do not let it set a phase; read
+        /// `LiveSnapshot::menu` for the menu instead.
         HeroSelection = 3 => "HeroSelection",
         /// Intro cinematic.
         MatchIntro = 4 => "MatchIntro",

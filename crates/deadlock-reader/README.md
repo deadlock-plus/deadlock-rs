@@ -334,12 +334,18 @@ are opt-in rather than on by default.
 
 `LiveSnapshot` exposes `match_mode` (Unranked / PrivateLobby / CoopBot / Ranked /
 Tutorial / HeroLabs / ...), `game_mode` (Normal / Sandbox / StreetBrawl / ExploreNYC / ...)
-and `context`, with helpers `is_hideout()`, `is_match()`, `is_ranked()`, `is_custom()`,
-`is_street_brawl()` and `describe()`.
+and `context` (Hideout / Match / Sandbox / ExploreNyc / Other), with helpers
+`is_hideout()`, `is_match()`, `is_ranked()`, `is_custom()`, `is_street_brawl()`,
+`is_sandbox()`, `is_explore_nyc()` and `describe()`. `menu` says whether a menu or the hero
+menu is up, and `PlayerRow::is_bot` marks the game's bots.
+
+`Reader::live_state()` is `live_snapshot()` with a `LiveState::Loading` answer for the
+seconds between maps, so a consumer can tell loading from no game.
 
 The Hideout needs care: it reports `GameInProgress` with match id `0` and both modes
 `Invalid`, which looks identical to a half-initialised match. Detection keys off entity
-classes that only exist on the Hideout map (`HIDEOUT_ENTITY_CLASSES`), not off state.
+classes that only exist on the Hideout map (`Tunables::hideout_classes`), not off state. The
+two offline maps are told apart the same way, since their game mode stays `Invalid`.
 
 Enum *values* are read from the runtime schema rather than hardcoded (`dlrs enums`
 dumps all ~200 of them), with the baked mapping as a fallback. `game_state_schema_name`

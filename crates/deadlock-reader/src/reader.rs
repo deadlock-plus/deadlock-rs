@@ -10,7 +10,7 @@ use crate::entity::{EntityLayout, EntitySnapshot, NameCache};
 use crate::error::{Error, Result};
 use crate::globals::Globals;
 use crate::schema::{SchemaIndex, SchemaLayout};
-use crate::snapshot::LiveSnapshot;
+use crate::snapshot::{LiveSnapshot, LiveState, Loading};
 use crate::tunables::Tunables;
 #[cfg(any(windows, target_os = "linux"))]
 use crate::{CLIENT_MODULE, DEADLOCK_PROCESS};
@@ -123,13 +123,13 @@ impl Reader {
     /// Proton is checked first because it is what ships today: the Windows `deadlock.exe`
     /// hosted by Wine, with the real PE mapped. A native `deadlock` + `client.so` is
     /// tried second so this keeps working if one appears - though
-    /// [`Reader::with_memory`] will then report [`Error::UnsupportedAbi`] until SysV
+    /// [`Reader::with_memory`] will then report [`Error::UnsupportedAbi`] until `SysV`
     /// constants are derived.
     #[cfg(target_os = "linux")]
     pub fn attach() -> Result<Self> {
         use crate::abi::Abi;
         match Self::attach_named(DEADLOCK_PROCESS, CLIENT_MODULE) {
-            Err(Error::ProcessNotFound(_)) => {}
+            Err(Error::Memory(deadlock_memory::Error::ProcessNotFound(_))) => {}
             other => return other,
         }
         Self::attach_named(crate::DEADLOCK_PROCESS_NATIVE, Abi::SysV.client_module())
@@ -488,6 +488,20 @@ impl Reader {
     pub fn live_snapshot(&self) -> Result<Option<LiveSnapshot>> {
         let entities = self.entities()?;
         LiveSnapshot::build(self, &entities)
+    }
+
+    /// Like [`Reader::live_snapshot`], but says when the client is loading a map.
+    ///
+    /// `Ok(None)` from the plain call covers loading and nothing-to-read alike; here the
+    /// first is [`LiveState::Loading`]. See [`LiveState`] for what "no game" looks like.
+    pub fn live_state(&self) -> Result<LiveState> {
+        let entities = self.entities()?;
+        Ok(match LiveSnapshot::build(self, &entities)? {
+            Some(snap) => LiveState::Live(Box::new(snap)),
+            None => LiveState::Loading(Loading {
+                entity_count: entities.len(),
+            }),
+        })
     }
 
     /// A live snapshot that reuses pinned entities instead of re-walking the entity list.

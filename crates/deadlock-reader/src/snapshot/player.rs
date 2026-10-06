@@ -71,7 +71,7 @@ const STAT_VIEWER: &str = "StatViewerModifierValues_t";
 ///
 /// Not derivable from `EModifierValue`'s 225 real stats: more than one modifier can
 /// contribute to the same stat, so the list is not bounded by the enum. This is a ceiling
-/// on the read rather than a claim about the game — at the ~0.7 us a cross-process read
+/// on the read rather than a claim about the game â€” at the ~0.7 us a cross-process read
 /// costs, it holds the whole twelve-player pass under about 2 ms even if every count is
 /// nonsense.
 ///
@@ -225,10 +225,10 @@ pub struct StatContribution {
 /// Each is read as a `CUtlVector<u32>`. The four sit `0x18` apart, so they are ordinary
 /// vectors rather than the strided kind `m_vecStatViewerModifierValues` needs.
 ///
-/// **The pairing is inferred, not observed.** The names divide cleanly into two halves —
+/// **The pairing is inferred, not observed.** The names divide cleanly into two halves â€”
 /// `m_vecBonusCounterAbilities` with `m_vecBonusCounterValues`, and
 /// `m_vecBonusCounterModifiers` with `m_vecModifierBonusCounterValues`, whose spelling
-/// mirrors its partner — and [`BonusCounters::ability_counters`] and
+/// mirrors its partner â€” and [`BonusCounters::ability_counters`] and
 /// [`BonusCounters::modifier_counters`] zip them on that reading. It has not been checked
 /// against a populated list: every one of the four read empty on the only client state
 /// available while this was written, which was the Hideout rather than a live match. The
@@ -311,6 +311,11 @@ pub struct PlayerRow {
     pub hero_id: Option<HeroId>,
     /// Steam64 id.
     pub steam_id: Option<u64>,
+    /// A bot: named `Bot<N>` by the game and carrying no Steam id.
+    ///
+    /// Bots read a Steam id of `0` rather than an absent field, so this checks for either.
+    /// A human who is literally named `Bot7` still has an id and is not a bot.
+    pub is_bot: bool,
     /// Steam persona name, from `m_iszPlayerName`.
     ///
     /// `None` if the field is unreadable or empty. Bots and not-yet-connected slots can
@@ -507,6 +512,16 @@ impl PlayerRow {
     }
 }
 
+/// Whether a controller is one of the game's bots.
+///
+/// The game names them `Bot0`, `Bot1`, ... and never gives them a Steam id.
+pub(crate) fn looks_like_bot(name: Option<&str>, steam_id: Option<u64>) -> bool {
+    let numbered = name
+        .and_then(|n| n.strip_prefix("Bot"))
+        .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
+    numbered && steam_id.unwrap_or(0) == 0
+}
+
 /// Address of the controller whose pawn the camera is following, if any.
 ///
 /// The chain is `local controller -> m_hPawn -> m_pObserverServices ->
@@ -607,6 +622,12 @@ fn read_controller(
     let is_spectator = team == Some(Team::SPECTATOR);
     let raw_slot = obj.u8(CONTROLLER, "m_unLobbyPlayerSlot").map(u32::from);
 
+    let steam_id = obj.u64(CONTROLLER, "m_steamID");
+    // m_iszPlayerName is an inline char array like m_szTeamname, not a pointer.
+    let name = obj
+        .cstr(BASE_CONTROLLER, "m_iszPlayerName", MAX_NAME)
+        .filter(|s| !s.is_empty());
+
     let mut row = PlayerRow {
         controller: base,
         // A spectator's slot field is not a lobby slot: it reads as 1 and collides
@@ -616,11 +637,9 @@ fn read_controller(
         team_name: team.and_then(|t| team_names.get(&t).cloned()),
         is_spectator,
         is_observed: observed == Some(base),
-        steam_id: obj.u64(CONTROLLER, "m_steamID"),
-        // m_iszPlayerName is an inline char array like m_szTeamname, not a pointer.
-        name: obj
-            .cstr(BASE_CONTROLLER, "m_iszPlayerName", MAX_NAME)
-            .filter(|s| !s.is_empty()),
+        is_bot: looks_like_bot(name.as_deref(), steam_id),
+        steam_id,
+        name,
         connected: obj
             .i32(BASE_CONTROLLER, "m_iConnected")
             .map(ConnectionState::from_raw),
@@ -704,8 +723,8 @@ fn read_player_data_global(
 /// Read `m_vecStatViewerModifierValues`, naming each stat from the runtime schema.
 ///
 /// Unconditional rather than behind a feature. The crate's two existing gates are not cost
-/// gates — `positions` is off because live coordinates confer an advantage, and `events`
-/// because it is a layer over the reader rather than part of it — and this is neither: the
+/// gates â€” `positions` is off because live coordinates confer an advantage, and `events`
+/// because it is a layer over the reader rather than part of it â€” and this is neither: the
 /// game shows every one of these numbers in its own stat viewer. What it costs is one
 /// 12-byte read per element, measured at ~0.7 us against the live client, so a hundred
 /// entries across twelve players is under a millisecond on a tick that already spends
@@ -1058,5 +1077,31 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(p.spent_ability_points(), 3);
+    }
+
+    #[test]
+    fn a_numbered_name_with_no_steam_id_is_a_bot() {
+        assert!(looks_like_bot(Some("Bot0"), Some(0)));
+        assert!(looks_like_bot(Some("Bot28"), None));
+    }
+
+    #[test]
+    fn a_human_named_like_a_bot_is_not_one() {
+        assert!(!looks_like_bot(Some("Bot7"), Some(76_561_198_347_512_100)));
+    }
+
+    #[test]
+    fn names_that_only_resemble_bots_are_not_bots() {
+        for name in [
+            None,
+            Some(""),
+            Some("Bot"),
+            Some("Bots1"),
+            Some("Bot1x"),
+            Some("bot1"),
+            Some("Flint Snow"),
+        ] {
+            assert!(!looks_like_bot(name, Some(0)), "{name:?}");
+        }
     }
 }

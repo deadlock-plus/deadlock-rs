@@ -98,14 +98,48 @@ pub const DEFAULT_TICK_RATE: f32 = 64.0;
 /// The Hideout is not a distinct game state: it reports `GameInProgress` with both modes
 /// `Invalid` and no match id, which is also what a half-initialised match looks like.
 /// Presence of these entities is the reliable signal.
+///
+/// `CCitadelHideoutTeleportTrigger` is deliberately absent: the Sandbox loads one too, so
+/// listing it made the Sandbox read as the Hideout.
 pub const DEFAULT_HIDEOUT_CLASSES: &[&str] = &[
     "C_CitadelTriggerHideout",
     "C_Citadel_Hideout_Ball",
     "C_Citadel_Hideout_Clock",
-    "CCitadelHideoutTeleportTrigger",
     "CCitadelHideoutInteractableProp",
+    "CCitadelHideoutInterestPoint",
     "C_NPC_Neutral_Hideout_Cat",
 ];
+
+/// Entity classes that identify the Sandbox map.
+///
+/// The client never sets `m_eGameMode` to Sandbox, so the map is told apart by what it
+/// loads. Observed on one build and not checked across patches; override through
+/// [`Tunables::sandbox_classes`] when a patch moves them.
+pub const DEFAULT_SANDBOX_CLASSES: &[&str] = &[
+    "CCitadelTunnelTrigger",
+    "CCitadel_ShopProp",
+    "CCitadelItemPickupRejuvHeroTest",
+    "C_NPC_Boss_Tier2",
+];
+
+/// Entity classes that identify the Explore NYC map. See [`DEFAULT_SANDBOX_CLASSES`].
+pub const DEFAULT_EXPLORE_NYC_CLASSES: &[&str] = &[
+    "CCitadelTriggerCapturePoint",
+    "CCitadelItemKothSpawner",
+    "C_CitadelObserverPawn",
+    "C_NPC_BarrackBoss",
+];
+
+/// The hero-preview unit the hero menu spawns while it is open.
+pub const DEFAULT_PORTRAIT_UNIT_CLASSES: &[&str] = &["C_PortraitWorldUnit"];
+
+/// Cameras the UI raises; the count goes up while a menu screen is showing.
+pub const DEFAULT_POINT_CAMERA_CLASSES: &[&str] = &["C_PointCamera"];
+
+/// `C_PointCamera` entities present with no menu screen up.
+///
+/// The play-mode screen and the hero menu each raised the count from 6 to 14.
+pub const DEFAULT_MENU_POINT_CAMERA_BASELINE: usize = 6;
 
 /// The Midboss NPC.
 pub const DEFAULT_MIDBOSS_CLASSES: &[&str] = &["C_NPC_MidBoss"];
@@ -244,6 +278,16 @@ pub struct Tunables {
     pub urn_classes: Vec<String>,
     /// Classes whose presence marks the Hideout.
     pub hideout_classes: Vec<String>,
+    /// Classes whose presence marks the Sandbox.
+    pub sandbox_classes: Vec<String>,
+    /// Classes whose presence marks Explore NYC.
+    pub explore_nyc_classes: Vec<String>,
+    /// Classes counted as the hero-menu preview unit.
+    pub portrait_unit_classes: Vec<String>,
+    /// Classes counted as UI cameras.
+    pub point_camera_classes: Vec<String>,
+    /// UI camera count with no menu screen showing.
+    pub menu_point_camera_baseline: usize,
     /// Classes sampled for the current engine time.
     pub clock_source_classes: Vec<String>,
     /// Element layout of `m_vecAbilityUpgradeState`.
@@ -277,6 +321,11 @@ impl Default for Tunables {
             midboss_classes: owned(DEFAULT_MIDBOSS_CLASSES),
             urn_classes: owned(DEFAULT_URN_CLASSES),
             hideout_classes: owned(DEFAULT_HIDEOUT_CLASSES),
+            sandbox_classes: owned(DEFAULT_SANDBOX_CLASSES),
+            explore_nyc_classes: owned(DEFAULT_EXPLORE_NYC_CLASSES),
+            portrait_unit_classes: owned(DEFAULT_PORTRAIT_UNIT_CLASSES),
+            point_camera_classes: owned(DEFAULT_POINT_CAMERA_CLASSES),
+            menu_point_camera_baseline: DEFAULT_MENU_POINT_CAMERA_BASELINE,
             clock_source_classes: owned(DEFAULT_CLOCK_SOURCE_CLASSES),
             ability_upgrade_layout: DEFAULT_ABILITY_UPGRADE_LAYOUT,
             rejuv_buff_duration: DEFAULT_REJUV_BUFF_DURATION,
@@ -320,14 +369,14 @@ mod tests {
     /// The read caps hold their values and stay clear of anything real.
     ///
     /// Each cap exists to stop a corrupt count causing a wild allocation, never to be a
-    /// realistic maximum — that is what their doc comments say, and it is only true while
+    /// realistic maximum â€” that is what their doc comments say, and it is only true while
     /// they sit well above what the game can produce. Nothing checked it: cutting
     /// `max_items` to 3, `max_modifiers` to 1 or `max_banned_heroes` to 1 passed the whole
     /// suite, live tests included.
     ///
     /// The failure a low cap produces is the quiet kind. [`Reader::field_vec_u32`]
     /// truncates at the limit and returns a **short list**, which is indistinguishable from
-    /// a player who genuinely holds that many items. No error, no `None`, no gap — the
+    /// a player who genuinely holds that many items. No error, no `None`, no gap â€” the
     /// scoreboard simply shows fewer items than the player has.
     ///
     /// A cap of zero is called out separately because it is the worst case and the easiest
@@ -337,13 +386,13 @@ mod tests {
     ///
     /// [`DEFAULT_ABILITY_UPGRADE_LAYOUT`] is a probed struct layout, and probes go stale
     /// silently: a wrong stride reads every element from the wrong place and still returns
-    /// numbers. Nothing checked it — changing the stride from `0x38` to `0x40`, or moving
+    /// numbers. Nothing checked it â€” changing the stride from `0x38` to `0x40`, or moving
     /// `m_ItemID` from `0x30` to `0x00`, passed the whole suite including the live tests,
     /// because a Hideout client has no ability upgrades for a wrong layout to misread.
     ///
     /// It does not have to stay a probe. The runtime schema declares
-    /// `AbilityUpgradeState_t` outright — 56 bytes, `m_ItemID` at `0x30`,
-    /// `m_nUpgradeInfo` at `0x34` — so the transcription can be checked against the game
+    /// `AbilityUpgradeState_t` outright â€” 56 bytes, `m_ItemID` at `0x30`,
+    /// `m_nUpgradeInfo` at `0x34` â€” so the transcription can be checked against the game
     /// rather than against the memory of having probed it.
     ///
     /// The struct's *size* is the stride, which is what makes this a complete check: a
@@ -378,6 +427,31 @@ mod tests {
             Some(layout.b),
             "m_nUpgradeInfo moved"
         );
+    }
+
+    /// The Sandbox loads `CCitadelHideoutTeleportTrigger`, so a hideout list that names it
+    /// reports the Sandbox as the Hideout.
+    #[test]
+    fn a_class_the_sandbox_also_loads_does_not_mark_the_hideout() {
+        let t = Tunables::default();
+        assert!(!class_in(
+            &t.hideout_classes,
+            "CCitadelHideoutTeleportTrigger"
+        ));
+        for map_list in [&t.sandbox_classes, &t.explore_nyc_classes] {
+            for class in map_list {
+                assert!(
+                    !class_in(&t.hideout_classes, class),
+                    "{class} is in both the hideout list and a map list"
+                );
+            }
+        }
+        for class in &t.sandbox_classes {
+            assert!(
+                !class_in(&t.explore_nyc_classes, class),
+                "{class} cannot tell the Sandbox from Explore NYC"
+            );
+        }
     }
 
     #[test]
@@ -484,6 +558,10 @@ mod tests {
             DEFAULT_URN_CLASSES,
             DEFAULT_MIDBOSS_CLASSES,
             DEFAULT_HIDEOUT_CLASSES,
+            DEFAULT_SANDBOX_CLASSES,
+            DEFAULT_EXPLORE_NYC_CLASSES,
+            DEFAULT_PORTRAIT_UNIT_CLASSES,
+            DEFAULT_POINT_CAMERA_CLASSES,
             DEFAULT_CLOCK_SOURCE_CLASSES,
         ] {
             let mut seen: Vec<&str> = list.to_vec();

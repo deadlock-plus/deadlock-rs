@@ -33,7 +33,7 @@ use crate::entity::EntitySnapshot;
 use crate::error::{Error, Result};
 use crate::reader::Reader;
 use crate::timers::Timers;
-use crate::tunables::class_in;
+use crate::tunables::{Tunables, class_in};
 
 // Re-exported so callers need only one import to work with a snapshot.
 pub use deadlock_core::{GameMode, GameState, MatchMode};
@@ -61,6 +61,9 @@ const RULES_FIELDS: &[&str] = &[
     "m_iPauseTeam",
     "m_pausingPlayerId",
     "m_nHideoutOwner",
+    "m_bMatchNotScored",
+    "m_unExpectedPlayerCount",
+    "m_bDontUploadStats",
     "m_flGameStartTime",
     "m_iWinningTeam",
     "m_iMidbossKillCount",
@@ -100,16 +103,78 @@ pub enum Perspective {
 }
 
 /// Where the player currently is, at a coarser grain than [`GameState`].
+///
+/// The two offline maps are told apart by the entity classes they load: the client leaves
+/// `m_eGameMode` at `Invalid` there, so the rules say nothing. See
+/// [`Tunables::sandbox_classes`] and [`Tunables::explore_nyc_classes`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[non_exhaustive]
 pub enum Context {
-    /// Game rules exist but neither pattern fits: loading, menus, tutorial.
+    /// Game rules exist but no pattern fits: loading, menus, tutorial, or an offline map
+    /// whose classes are ambiguous.
     #[default]
     Other,
     /// Sitting in the Hideout.
     Hideout,
     /// In a real match (queued, custom, bot, or brawl).
     Match,
+    /// On the offline Sandbox map.
+    Sandbox,
+    /// On the offline Explore NYC map.
+    ExploreNyc,
+}
+
+/// Whether a menu screen is up, read from the UI entities the client keeps loaded.
+///
+/// Facts, not a state machine: the play-mode screen and the hero menu both raise the
+/// camera count, and only the hero menu spawns a hero-preview unit. Meaningful in the
+/// Hideout, where the menus are reachable.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct MenuState {
+    /// Hero-preview units loaded.
+    pub portrait_units: usize,
+    /// UI cameras loaded.
+    pub point_cameras: usize,
+    /// A hero-preview unit exists, which is what the hero menu spawns.
+    pub hero_menu_open: bool,
+    /// More UI cameras than [`Tunables::menu_point_camera_baseline`]: some menu screen,
+    /// the hero menu included, is showing.
+    pub menu_open: bool,
+}
+
+/// Counts of the entity classes that place the client, gathered in one pass.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Survey {
+    hideout: bool,
+    sandbox: bool,
+    explore_nyc: bool,
+    portrait_units: usize,
+    point_cameras: usize,
+}
+
+impl Survey {
+    pub(crate) fn of<'a>(classes: impl IntoIterator<Item = &'a str>, t: &Tunables) -> Self {
+        let mut out = Survey::default();
+        for class in classes {
+            out.hideout |= class_in(&t.hideout_classes, class);
+            out.sandbox |= class_in(&t.sandbox_classes, class);
+            out.explore_nyc |= class_in(&t.explore_nyc_classes, class);
+            out.portrait_units += usize::from(class_in(&t.portrait_unit_classes, class));
+            out.point_cameras += usize::from(class_in(&t.point_camera_classes, class));
+        }
+        out
+    }
+
+    pub(crate) fn menu(&self, t: &Tunables) -> MenuState {
+        MenuState {
+            portrait_units: self.portrait_units,
+            point_cameras: self.point_cameras,
+            hero_menu_open: self.portrait_units > 0,
+            menu_open: self.point_cameras > t.menu_point_camera_baseline,
+        }
+    }
 }
 
 /// Street Brawl round state, from the `CStreetBrawlController` the rules class embeds.
@@ -226,8 +291,18 @@ pub struct LiveSnapshot {
     pub timers: Timers,
     /// Per-team aggregates, for the two playing sides.
     pub teams: Vec<TeamStats>,
+    /// Menu screens the client has up. See [`MenuState`].
+    pub menu: MenuState,
     /// `m_nHideoutOwner`, when readable.
     pub hideout_owner: Option<u32>,
+    /// `m_bMatchNotScored`: the match does not count towards ratings or records.
+    pub match_not_scored: Option<bool>,
+    /// `m_bDontUploadStats`: the client will not upload this match's stats.
+    pub dont_upload_stats: Option<bool>,
+    /// `m_unExpectedPlayerCount`, the player count the server expects to join.
+    ///
+    /// `0` in the Hideout and `u32::MAX` in some unset states; nothing here interprets it.
+    pub expected_player_count: Option<u32>,
     /// Whether the match is paused, combining every available signal.
     pub paused: Option<bool>,
     /// The individual pause fields, for callers that want to see which one fired.
@@ -288,6 +363,56 @@ pub struct LiveSnapshot {
     /// Carried here rather than left on the reader because a signal a caller has to
     /// remember to ask for is one most callers never see.
     pub drift: Vec<Drift>,
+}
+
+/// What [`Reader::live_state`] found.
+///
+/// [`Reader::live_snapshot`] answers `Ok(None)` both while the client is loading a map and
+/// when there is nothing to read, and a map change keeps it there for 3-26 seconds. A
+/// consumer that wants to hold the last state through a load instead of showing "no game"
+/// needs the two told apart, and this is that.
+///
+/// "No game" is not here: with no game process, attaching fails (see
+/// [`Attached::Absent`](crate::supervise::Attached::Absent)) and there is no reader to
+/// ask. A reader that is attached and sees no game-rules entity is loading.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub enum LiveState {
+    /// Attached, but the game-rules entity is not there: a map is loading or unloading.
+    Loading(Loading),
+    /// A snapshot was built. Boxed because it dwarfs the other variant.
+    Live(Box<LiveSnapshot>),
+}
+
+/// What is known while a map loads.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Loading {
+    /// Entities in the list at the time. Small, and growing, while a map streams in.
+    pub entity_count: usize,
+}
+
+impl LiveState {
+    /// Whether the client is between maps.
+    pub fn is_loading(&self) -> bool {
+        matches!(self, LiveState::Loading(_))
+    }
+
+    /// The snapshot, if there is one. The same answer as [`Reader::live_snapshot`] gives.
+    pub fn snapshot(&self) -> Option<&LiveSnapshot> {
+        match self {
+            LiveState::Live(s) => Some(s),
+            LiveState::Loading(_) => None,
+        }
+    }
+
+    /// Consume into the snapshot, if there is one.
+    pub fn into_snapshot(self) -> Option<LiveSnapshot> {
+        match self {
+            LiveState::Live(s) => Some(*s),
+            LiveState::Loading(_) => None,
+        }
+    }
 }
 
 /// How far the scheduled Midboss spawn may slip before it counts as overdue.
@@ -389,12 +514,11 @@ impl LiveSnapshot {
             }
         }
 
-        let context = detect_context(
-            entities,
-            match_id,
-            game_mode_raw,
-            &reader.tunables().hideout_classes,
+        let survey = Survey::of(
+            entities.all().iter().map(crate::entity::Entity::best_name),
+            reader.tunables(),
         );
+        let context = detect_context(&survey, match_id, game_mode_raw);
 
         // Several pause fields exist and it is unclear which a spectating client sees
         // replicated, so read them all and let PauseState combine them.
@@ -424,7 +548,11 @@ impl LiveSnapshot {
             game_mode: game_mode_raw.map(GameMode::from_raw),
             context,
             perspective: Perspective::Unknown,
+            menu: survey.menu(reader.tunables()),
             hideout_owner: rules.u32(RULES, "m_nHideoutOwner"),
+            match_not_scored: rules.bool(RULES, "m_bMatchNotScored"),
+            dont_upload_stats: rules.bool(RULES, "m_bDontUploadStats"),
+            expected_player_count: rules.u32(RULES, "m_unExpectedPlayerCount"),
             paused: Some(pause.is_paused()),
             pause,
             // Cloned because `collect_players` and `collect_objectives` below still
@@ -498,6 +626,16 @@ impl LiveSnapshot {
         self.context == Context::Match
     }
 
+    /// Whether the client is on the offline Sandbox map.
+    pub fn is_sandbox(&self) -> bool {
+        self.context == Context::Sandbox
+    }
+
+    /// Whether the client is on the offline Explore NYC map.
+    pub fn is_explore_nyc(&self) -> bool {
+        self.context == Context::ExploreNyc
+    }
+
     /// Whether this is a ranked match.
     pub fn is_ranked(&self) -> bool {
         self.is_match() && self.match_mode.map(|m| m.is_ranked()).unwrap_or(false)
@@ -527,6 +665,8 @@ impl LiveSnapshot {
     pub fn describe(&self) -> String {
         match self.context {
             Context::Hideout => "Hideout".into(),
+            Context::Sandbox => "Sandbox".into(),
+            Context::ExploreNyc => "Explore NYC".into(),
             Context::Match => format!(
                 "{} / {}",
                 self.match_mode.map(|m| m.name()).unwrap_or("?"),
@@ -762,32 +902,173 @@ fn read_street_brawl(reader: &Reader, rules: &crate::reader::Object<'_>) -> Opti
     })
 }
 
-fn detect_context(
-    entities: &EntitySnapshot,
-    match_id: Option<u64>,
-    game_mode_raw: Option<u32>,
-    hideout_classes: &[String],
-) -> Context {
-    let hideout_entities = entities
-        .all()
-        .iter()
-        .any(|e| class_in(hideout_classes, e.best_name()));
-    if hideout_entities {
+/// Place the client from the classes it has loaded and what the rules say.
+///
+/// Order matters. The Hideout wins over everything because its entities stay loaded while
+/// spectating from it. A match id or a real game mode is a match. Only then do the offline
+/// maps get a say, and a map whose classes both lists claim is left as `Other` rather than
+/// guessed.
+fn detect_context(survey: &Survey, match_id: Option<u64>, game_mode_raw: Option<u32>) -> Context {
+    if survey.hideout {
         return Context::Hideout;
     }
-    // A real match has a match id, or at least a game mode that is not Invalid.
-    let has_match_id = match_id.is_some();
-    let has_mode = game_mode_raw.unwrap_or(0) != 0;
-    if has_match_id || has_mode {
-        Context::Match
-    } else {
-        Context::Other
+    if match_id.is_some() {
+        return Context::Match;
+    }
+    match game_mode_raw.map(GameMode::from_raw) {
+        Some(GameMode::Sandbox) => return Context::Sandbox,
+        Some(GameMode::ExploreNyc) => return Context::ExploreNyc,
+        Some(GameMode::Invalid) | None => {}
+        Some(_) => return Context::Match,
+    }
+    match (survey.sandbox, survey.explore_nyc) {
+        (true, false) => Context::Sandbox,
+        (false, true) => Context::ExploreNyc,
+        _ => Context::Other,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn place(classes: &[&str], match_id: Option<u64>, game_mode_raw: Option<u32>) -> Context {
+        let t = Tunables::default();
+        let survey = Survey::of(classes.iter().copied(), &t);
+        detect_context(&survey, match_id, game_mode_raw)
+    }
+
+    const HIDEOUT_SET: &[&str] = &[
+        "C_CitadelTriggerHideout",
+        "CCitadelHideoutInterestPoint",
+        "CCitadelHideoutTeleportTrigger",
+        "C_PointCamera",
+    ];
+    const SANDBOX_SET: &[&str] = &[
+        "CCitadelHideoutTeleportTrigger",
+        "CCitadelTunnelTrigger",
+        "CCitadel_ShopProp",
+        "C_NPC_Boss_Tier2",
+    ];
+    const NYC_SET: &[&str] = &[
+        "CCitadelTriggerCapturePoint",
+        "CCitadelItemKothSpawner",
+        "C_NPC_BarrackBoss",
+    ];
+
+    #[test]
+    fn the_hideout_is_told_from_its_own_classes() {
+        assert_eq!(place(HIDEOUT_SET, None, Some(0)), Context::Hideout);
+    }
+
+    /// The Sandbox loads the Hideout's teleport trigger, which once made it read as the
+    /// Hideout.
+    #[test]
+    fn the_sandbox_is_not_the_hideout_though_it_loads_a_teleport_trigger() {
+        assert_eq!(place(SANDBOX_SET, None, Some(0)), Context::Sandbox);
+        assert_eq!(
+            place(&["CCitadelHideoutTeleportTrigger"], None, Some(0)),
+            Context::Other,
+            "one shared class is not enough to name any place"
+        );
+    }
+
+    #[test]
+    fn explore_nyc_is_told_from_its_own_classes() {
+        assert_eq!(place(NYC_SET, None, Some(0)), Context::ExploreNyc);
+    }
+
+    #[test]
+    fn a_class_set_both_offline_maps_claim_is_left_unnamed() {
+        let both: Vec<&str> = SANDBOX_SET.iter().chain(NYC_SET).copied().collect();
+        assert_eq!(place(&both, None, Some(0)), Context::Other);
+    }
+
+    #[test]
+    fn a_match_id_beats_the_map_classes() {
+        assert_eq!(place(SANDBOX_SET, Some(42), Some(1)), Context::Match);
+        assert_eq!(place(NYC_SET, Some(42), Some(0)), Context::Match);
+    }
+
+    #[test]
+    fn the_hideout_beats_the_map_classes_it_shares_the_list_with() {
+        let both: Vec<&str> = HIDEOUT_SET.iter().chain(NYC_SET).copied().collect();
+        assert_eq!(place(&both, None, Some(0)), Context::Hideout);
+    }
+
+    #[test]
+    fn a_game_mode_the_client_does_set_still_decides() {
+        assert_eq!(place(&[], None, Some(3)), Context::Sandbox);
+        assert_eq!(place(&[], None, Some(5)), Context::ExploreNyc);
+        assert_eq!(place(&[], None, Some(1)), Context::Match);
+        assert_eq!(place(&[], None, Some(4)), Context::Match);
+        assert_eq!(place(&[], None, Some(0)), Context::Other);
+        assert_eq!(place(&[], None, None), Context::Other);
+    }
+
+    #[test]
+    fn describe_names_the_offline_maps() {
+        let mut s = LiveSnapshot {
+            context: Context::Sandbox,
+            ..Default::default()
+        };
+        assert_eq!(s.describe(), "Sandbox");
+        assert!(s.is_sandbox() && !s.is_explore_nyc() && !s.is_match() && !s.is_hideout());
+        s.context = Context::ExploreNyc;
+        assert_eq!(s.describe(), "Explore NYC");
+        assert!(s.is_explore_nyc() && !s.is_sandbox());
+    }
+
+    fn menu(classes: &[&str]) -> MenuState {
+        let t = Tunables::default();
+        Survey::of(classes.iter().copied(), &t).menu(&t)
+    }
+
+    #[test]
+    fn a_hero_preview_unit_means_the_hero_menu_is_open() {
+        let mut classes = vec!["C_PointCamera"; 14];
+        classes.push("C_PortraitWorldUnit");
+        let m = menu(&classes);
+        assert_eq!((m.portrait_units, m.point_cameras), (1, 14));
+        assert!(m.hero_menu_open && m.menu_open);
+    }
+
+    /// The play-mode screen raises the camera count without spawning a preview unit.
+    #[test]
+    fn extra_cameras_alone_mean_a_menu_but_not_the_hero_menu() {
+        let m = menu(&["C_PointCamera"; 14]);
+        assert!(m.menu_open && !m.hero_menu_open);
+    }
+
+    #[test]
+    fn the_baseline_camera_count_is_no_menu() {
+        let m = menu(&["C_PointCamera"; 6]);
+        assert!(!m.menu_open && !m.hero_menu_open);
+        assert_eq!(menu(&[]), MenuState::default());
+    }
+
+    #[test]
+    fn the_menu_baseline_is_overridable() {
+        let t = Tunables {
+            menu_point_camera_baseline: 20,
+            ..Tunables::default()
+        };
+        let s = Survey::of(["C_PointCamera"; 14], &t);
+        assert!(!s.menu(&t).menu_open);
+    }
+
+    #[test]
+    fn a_loading_state_has_no_snapshot() {
+        let loading = LiveState::Loading(Loading { entity_count: 12 });
+        assert!(loading.is_loading());
+        assert!(loading.snapshot().is_none());
+        assert!(loading.into_snapshot().is_none());
+
+        let live = LiveState::Live(Box::default());
+        assert!(!live.is_loading());
+        assert!(live.snapshot().is_some());
+        assert!(live.into_snapshot().is_some());
+    }
 
     /// A match id of zero is the game's "no match", not a match numbered zero.
     ///
