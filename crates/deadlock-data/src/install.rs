@@ -152,19 +152,53 @@ fn steam_roots() -> Vec<PathBuf> {
             }
         }
     } else if let Some(home) = std::env::var_os("HOME") {
-        let home = PathBuf::from(home);
-        push(home.join(".steam").join("steam"));
-        push(home.join(".local").join("share").join("Steam"));
-        push(
-            home.join(".var")
-                .join("app")
-                .join("com.valvesoftware.Steam")
-                .join(".local")
-                .join("share")
-                .join("Steam"),
-        );
+        let xdg = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
+        for candidate in unix_steam_candidates(&PathBuf::from(home), xdg, cfg!(target_os = "macos"))
+        {
+            push(candidate);
+        }
     }
     roots
+}
+
+/// Steam install locations under a Unix home directory, most likely first.
+///
+/// Pure so the layouts can be checked on any host. macOS keeps Steam under
+/// `Library/Application Support`; Linux has the classic symlinks, the XDG data directory,
+/// and the Flatpak and Snap sandboxes, each with its own copy of the tree.
+fn unix_steam_candidates(home: &Path, xdg_data_home: Option<PathBuf>, macos: bool) -> Vec<PathBuf> {
+    if macos {
+        return vec![
+            home.join("Library")
+                .join("Application Support")
+                .join("Steam"),
+        ];
+    }
+    let mut out = vec![
+        home.join(".steam").join("steam"),
+        home.join(".steam").join("root"),
+    ];
+    if let Some(xdg) = xdg_data_home {
+        out.push(xdg.join("Steam"));
+    }
+    out.push(home.join(".local").join("share").join("Steam"));
+    out.push(
+        home.join(".var")
+            .join("app")
+            .join("com.valvesoftware.Steam")
+            .join(".local")
+            .join("share")
+            .join("Steam"),
+    );
+    out.push(
+        home.join("snap")
+            .join("steam")
+            .join("common")
+            .join(".local")
+            .join("share")
+            .join("Steam"),
+    );
+    out
 }
 
 /// How many top-level directories to look inside per drive.
@@ -210,6 +244,30 @@ mod tests {
         assert_eq!(roots[0], dir);
         assert_eq!(roots[1], PathBuf::from(r"D:\Programs\Steam"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn macos_steam_lives_under_application_support() {
+        let c = unix_steam_candidates(Path::new("/Users/u"), None, true);
+        assert_eq!(
+            c,
+            vec![PathBuf::from("/Users/u/Library/Application Support/Steam")]
+        );
+    }
+
+    #[test]
+    fn linux_candidates_cover_native_xdg_flatpak_and_snap() {
+        let c = unix_steam_candidates(Path::new("/home/u"), Some(PathBuf::from("/data")), false);
+        let has = |tail: &str| {
+            c.iter()
+                .any(|p| p.to_string_lossy().replace('\\', "/").ends_with(tail))
+        };
+        assert!(has("/home/u/.steam/steam"));
+        assert!(has("/data/Steam"));
+        assert!(has("/home/u/.local/share/Steam"));
+        assert!(has("com.valvesoftware.Steam/.local/share/Steam"));
+        assert!(has("snap/steam/common/.local/share/Steam"));
+        assert!(!has("Application Support/Steam"));
     }
 
     #[test]
