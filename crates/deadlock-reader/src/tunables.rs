@@ -119,7 +119,6 @@ pub const DEFAULT_SANDBOX_CLASSES: &[&str] = &[
     "CCitadelTunnelTrigger",
     "CCitadel_ShopProp",
     "CCitadelItemPickupRejuvHeroTest",
-    "C_NPC_Boss_Tier2",
 ];
 
 /// Entity classes that identify the Explore NYC map. See [`DEFAULT_SANDBOX_CLASSES`].

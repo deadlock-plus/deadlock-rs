@@ -906,8 +906,8 @@ fn read_street_brawl(reader: &Reader, rules: &crate::reader::Object<'_>) -> Opti
 ///
 /// Order matters. The Hideout wins over everything because its entities stay loaded while
 /// spectating from it. A match id or a real game mode is a match. Only then do the offline
-/// maps get a say, and a map whose classes both lists claim is left as `Other` rather than
-/// guessed.
+/// maps get a say. Explore NYC loads the Sandbox's classes as well, so a map both lists claim is
+/// Explore NYC.
 fn detect_context(survey: &Survey, match_id: Option<u64>, game_mode_raw: Option<u32>) -> Context {
     if survey.hideout {
         return Context::Hideout;
@@ -923,7 +923,7 @@ fn detect_context(survey: &Survey, match_id: Option<u64>, game_mode_raw: Option<
     }
     match (survey.sandbox, survey.explore_nyc) {
         (true, false) => Context::Sandbox,
-        (false, true) => Context::ExploreNyc,
+        (_, true) => Context::ExploreNyc,
         _ => Context::Other,
     }
 }
@@ -948,7 +948,6 @@ mod tests {
         "CCitadelHideoutTeleportTrigger",
         "CCitadelTunnelTrigger",
         "CCitadel_ShopProp",
-        "C_NPC_Boss_Tier2",
     ];
     const NYC_SET: &[&str] = &[
         "CCitadelTriggerCapturePoint",
@@ -978,10 +977,23 @@ mod tests {
         assert_eq!(place(NYC_SET, None, Some(0)), Context::ExploreNyc);
     }
 
+    /// Walkers load on every map with lanes, so a walker alone says nothing about the Sandbox.
     #[test]
-    fn a_class_set_both_offline_maps_claim_is_left_unnamed() {
+    fn explore_nyc_with_walkers_is_still_explore_nyc() {
+        let nyc: Vec<&str> = NYC_SET
+            .iter()
+            .chain(&["C_NPC_Boss_Tier2"])
+            .copied()
+            .collect();
+        assert_eq!(place(&nyc, None, Some(0)), Context::ExploreNyc);
+    }
+
+    /// Explore NYC loads the Sandbox's tunnel triggers and shop props too; the Sandbox loads
+    /// none of NYC's objectives, so a set that both lists claim is NYC.
+    #[test]
+    fn a_class_set_both_offline_maps_claim_is_explore_nyc() {
         let both: Vec<&str> = SANDBOX_SET.iter().chain(NYC_SET).copied().collect();
-        assert_eq!(place(&both, None, Some(0)), Context::Other);
+        assert_eq!(place(&both, None, Some(0)), Context::ExploreNyc);
     }
 
     #[test]
