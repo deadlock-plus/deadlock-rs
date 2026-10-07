@@ -168,7 +168,7 @@ raw_enum! {
         ServerTest = 5 => "ServerTest",
         /// Tutorial.
         Tutorial = 6 => "Tutorial",
-        /// Hero Labs.
+        /// Retired mode; the game keeps the value in its enum.
         HeroLabs = 7 => "HeroLabs",
         /// New player placement matches.
         NewPlayerPlacement = 8 => "NewPlayerPlacement",

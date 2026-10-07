@@ -576,7 +576,7 @@ mod tests {
     /// This is the guard on the snapshot, not on the hash. The vendored data comes from
     /// deadlock-api.com, which published `2839987102` for `gunslinger_demonMark` against
     /// the correct `3673718559`. That one went unnoticed because Gunslinger is a disabled
-    /// dev hero: Infernal Brand is only reachable in Hero Labs or a sandbox match, so no
+    /// dev hero: Infernal Brand is only reachable in a sandbox match, so no
     /// ordinary game ever exercised the wrong id. Re-deriving is cheap enough to run over
     /// the whole snapshot, which closes the class of defect rather than the one instance.
     ///

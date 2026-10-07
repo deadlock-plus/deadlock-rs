@@ -333,7 +333,7 @@ are opt-in rather than on by default.
 ### Modes, and telling the Hideout apart
 
 `LiveSnapshot` exposes `match_mode` (Unranked / PrivateLobby / CoopBot / Ranked /
-Tutorial / HeroLabs / ...), `game_mode` (Normal / Sandbox / StreetBrawl / ExploreNYC / ...)
+Tutorial / ...), `game_mode` (Normal / Sandbox / StreetBrawl / ExploreNYC / ...)
 and `context` (Hideout / Match / Sandbox / ExploreNyc / Other), with helpers
 `is_hideout()`, `is_match()`, `is_ranked()`, `is_custom()`, `is_street_brawl()`,
 `is_sandbox()`, `is_explore_nyc()` and `describe()`. `menu` says whether a menu or the hero
