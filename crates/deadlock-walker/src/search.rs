@@ -17,6 +17,9 @@ pub struct SearchConfig {
     pub exclude: Vec<Range<u64>>,
     /// Stop after this many hits.
     pub limit: usize,
+    /// Most threads a search may use. A sweep reads gigabytes, so every extra thread spends
+    /// that much more of the machine at once while the game is running.
+    pub threads: usize,
 }
 
 impl Default for SearchConfig {
@@ -27,6 +30,7 @@ impl Default for SearchConfig {
             chunk: 1024 * 1024,
             exclude: Vec::new(),
             limit: 4096,
+            threads: 2,
         }
     }
 }
@@ -85,10 +89,8 @@ pub fn find_in(
     config: &SearchConfig,
 ) -> Vec<Vec<u64>> {
     let needles: Vec<[u8; 8]> = vtables.iter().map(|v| v.to_le_bytes()).collect();
-    let threads = std::thread::available_parallelism()
-        .map_or(1, std::num::NonZeroUsize::get)
-        .min(regions.len())
-        .min(MAX_THREADS);
+    let available = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+    let threads = worker_count(available, regions.len(), config.threads);
 
     let mut hits: Vec<Vec<u64>> = vec![Vec::new(); needles.len()];
     if threads <= 1 {
@@ -125,6 +127,11 @@ pub fn find_in(
 }
 
 const MAX_THREADS: usize = 8;
+
+fn worker_count(available: usize, regions: usize, wanted: usize) -> usize {
+    available.min(regions).min(wanted.clamp(1, MAX_THREADS))
+}
+
 const PAGE: usize = 4096;
 
 fn search_stripe(
@@ -180,5 +187,28 @@ fn scan(buf: &[u8], base: u64, needles: &[[u8; 8]], config: &SearchConfig, hits:
                 found.push(addr);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_configured_cap_bounds_the_workers() {
+        assert_eq!(worker_count(16, 10_000, 2), 2);
+        assert_eq!(worker_count(16, 10_000, 100), MAX_THREADS);
+    }
+
+    #[test]
+    fn never_more_workers_than_cores_or_regions_and_at_least_one() {
+        assert_eq!(worker_count(1, 10_000, 4), 1);
+        assert_eq!(worker_count(16, 3, 8), 3);
+        assert_eq!(worker_count(16, 10_000, 0), 1);
+    }
+
+    #[test]
+    fn a_default_search_is_gentle() {
+        assert_eq!(SearchConfig::default().threads, 2);
     }
 }
