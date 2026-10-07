@@ -6,6 +6,12 @@ use crate::error::{Error, Result};
 
 const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
 
+/// Offset of the exception directory entry in the PE32+ optional header.
+const EXCEPTION_DIRECTORY: usize = 112 + 3 * 8;
+
+/// Size of one `RUNTIME_FUNCTION` entry: begin RVA, end RVA, unwind RVA.
+const RUNTIME_FUNCTION_SIZE: usize = 12;
+
 /// One PE section, as mapped in memory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Section {
@@ -32,6 +38,7 @@ pub struct PeImage {
     base: u64,
     bytes: Vec<u8>,
     sections: Vec<Section>,
+    exception_table: Option<(usize, usize)>,
 }
 
 impl PeImage {
@@ -92,10 +99,18 @@ impl PeImage {
                 characteristics: field(36)?,
             });
         }
+        let exception_table = (opt_size >= EXCEPTION_DIRECTORY + 8)
+            .then(|| {
+                let rva = u32_at(opt + EXCEPTION_DIRECTORY)? as usize;
+                let size = u32_at(opt + EXCEPTION_DIRECTORY + 4)? as usize;
+                (rva != 0 && size != 0).then_some((rva, size))
+            })
+            .flatten();
         Ok(PeImage {
             base,
             bytes,
             sections,
+            exception_table,
         })
     }
 
@@ -124,11 +139,46 @@ impl PeImage {
         })
     }
 
+    /// The `[begin, end)` RVAs of the function the exception table lists around `rva`.
+    pub(crate) fn function_containing(&self, rva: u32) -> Option<(u32, u32)> {
+        let (table, size) = self.exception_table?;
+        let entries = self.bytes.get(table..table.checked_add(size)?)?;
+        let entry = |i: usize| -> Option<(u32, u32)> {
+            let e = entries.get(i * RUNTIME_FUNCTION_SIZE..(i + 1) * RUNTIME_FUNCTION_SIZE)?;
+            Some((
+                u32::from_le_bytes(e[0..4].try_into().ok()?),
+                u32::from_le_bytes(e[4..8].try_into().ok()?),
+            ))
+        };
+        let (mut lo, mut hi) = (0, entries.len() / RUNTIME_FUNCTION_SIZE);
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            let (begin, end) = entry(mid)?;
+            if rva < begin {
+                hi = mid;
+            } else if rva >= end {
+                lo = mid + 1;
+            } else {
+                return Some((begin, end));
+            }
+        }
+        None
+    }
+
     /// The bytes of every non-executable section, with the RVA each starts at.
     pub(crate) fn data_sections(&self) -> impl Iterator<Item = (usize, &[u8])> {
+        self.section_bytes(false)
+    }
+
+    /// The bytes of every executable section, with the RVA each starts at.
+    pub(crate) fn code_sections(&self) -> impl Iterator<Item = (usize, &[u8])> {
+        self.section_bytes(true)
+    }
+
+    fn section_bytes(&self, code: bool) -> impl Iterator<Item = (usize, &[u8])> {
         self.sections
             .iter()
-            .filter(|s| !s.is_code())
+            .filter(move |s| s.is_code() == code)
             .filter_map(|s| {
                 let start = s.rva as usize;
                 let end = (start + s.size as usize).min(self.bytes.len());

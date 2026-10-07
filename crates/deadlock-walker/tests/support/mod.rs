@@ -337,6 +337,22 @@ impl World {
         w
     }
 
+    /// Register a plain C++ class (no protobuf layout) under its undecorated name and
+    /// return its primary vtable.
+    pub fn add_plain_class(&mut self, name: &str) -> u64 {
+        let vtable = self.image.add_class(&decorated(name));
+        self.commit();
+        vtable
+    }
+
+    /// A zeroed heap object of `size` bytes whose first qword is `vtable`.
+    pub fn alloc_object(&mut self, vtable: u64, size: usize) -> u64 {
+        let addr = self.heap.alloc(size, 8);
+        self.heap.put(addr, &vtable.to_le_bytes());
+        self.commit();
+        addr
+    }
+
     /// Place a never-freed "default instance" of `name` in the module's `.data`.
     pub fn add_default_instance(&mut self, name: &str) -> u64 {
         let at = self.image.alloc_data(self.layouts[name].size);

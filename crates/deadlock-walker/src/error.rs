@@ -35,6 +35,8 @@ pub enum Error {
     /// A session was used against a different process than the one it was built on. Its
     /// vtable addresses belong to that process; build a new session.
     WrongProcess,
+    /// A code pattern the lookup is anchored on is not in this build of the image.
+    AnchorNotFound(&'static str),
 }
 
 impl fmt::Display for Error {
@@ -55,6 +57,7 @@ impl fmt::Display for Error {
             Error::Changed => write!(f, "object changed while it was being read"),
             Error::Limit(what) => write!(f, "limit exceeded: {what}"),
             Error::WrongProcess => write!(f, "session was built on a different process"),
+            Error::AnchorNotFound(what) => write!(f, "anchor not found in the image: {what}"),
         }
     }
 }
