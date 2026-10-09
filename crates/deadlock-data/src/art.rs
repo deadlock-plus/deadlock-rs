@@ -1,4 +1,4 @@
-//! Hero portraits and rank badges read from the installed game.
+//! Hero portraits, rank badges, ability and item icons read from the installed game.
 //!
 //! The textures are `vtex_c` resources in `pak01_dir.vpk`. [`ArtArchive`] opens the archive
 //! once, finds an asset by [`Art`] request, decodes the first mip (undoing the game's
@@ -14,7 +14,7 @@
 //!
 //! The art is Valve's. Decode it for the user's own machine; do not ship or commit it.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use source2::ext::{ResourceTexture, VpkResourceKv3};
@@ -24,12 +24,14 @@ use source2::vpk::Vpk;
 
 use crate::error::{Error, Result};
 use crate::install::ARCHIVE;
-use crate::vdata::{HEROES_PATH, vpk_error};
+use crate::vdata::{ABILITIES_PATH, HEROES_PATH, vpk_error};
 
 const HERO_DIR: &str = "panorama/images/heroes";
 const BADGE_DIR: &str = "panorama/images/ranked/badges";
 const CLASS_PREFIX: &str = "hero_";
 const IMAGES_PREFIX: &str = "file://{images}/";
+const ABILITY_DIR: &str = "panorama/images/hud/abilities";
+const ITEM_DIR: &str = "panorama/images/items";
 
 /// The `heroes.vdata_c` field that names each image's source file.
 const HERO_FIELDS: [(HeroArtKind, &str); 6] = [
@@ -118,6 +120,21 @@ impl RankArtKind {
     }
 }
 
+/// Which of an item's images.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ItemArtKind {
+    /// The small icon shown in the HUD and on the item's slot (`m_strAbilityImage`).
+    Icon,
+    /// The large shop image (`m_strShopIconLarge`). Not every item has one.
+    Shop,
+}
+
+impl ItemArtKind {
+    /// Every kind.
+    pub const ALL: [ItemArtKind; 2] = [ItemArtKind::Icon, ItemArtKind::Shop];
+}
+
 /// One image in the game's files.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Art<'a> {
@@ -135,6 +152,18 @@ pub enum Art<'a> {
         /// Which badge.
         kind: RankArtKind,
     },
+    /// An ability's icon, by class name (`ability_...`).
+    Ability {
+        /// The ability's class name in `abilities.vdata_c`.
+        class_name: &'a str,
+    },
+    /// An item (upgrade or weapon), by class name (`upgrade_...`).
+    Item {
+        /// The item's class name in `abilities.vdata_c`.
+        class_name: &'a str,
+        /// Which image.
+        kind: ItemArtKind,
+    },
 }
 
 impl<'a> Art<'a> {
@@ -148,11 +177,23 @@ impl<'a> Art<'a> {
         Art::Rank { tier, kind }
     }
 
+    /// An ability's icon.
+    pub fn ability(class_name: &'a str) -> Self {
+        Art::Ability { class_name }
+    }
+
+    /// An item image.
+    pub fn item(class_name: &'a str, kind: ItemArtKind) -> Self {
+        Art::Item { class_name, kind }
+    }
+
     /// The texture's path by the naming rule alone: `hero_art_key` for heroes, the tier
     /// number for ranks.
     ///
     /// Right for ranks. For heroes it is the fallback; [`ArtArchive::path`] gives the
-    /// game's actual answer.
+    /// game's actual answer. Abilities and items have no real naming rule (art sits in
+    /// per-hero and per-category folders), so their rule path is a guess that in practice
+    /// names no file; only the game's table finds them.
     pub fn rule_path(&self) -> String {
         match *self {
             Art::Hero {
@@ -170,6 +211,14 @@ impl<'a> Art<'a> {
                     hero_art_key(class_name),
                     kind.file_suffix()
                 )
+            }
+            Art::Ability { class_name } => format!("{ABILITY_DIR}/{class_name}_psd.vtex_c"),
+            Art::Item { class_name, kind } => {
+                let suffix = match kind {
+                    ItemArtKind::Icon => "icon",
+                    ItemArtKind::Shop => "shop",
+                };
+                format!("{ITEM_DIR}/{class_name}_{suffix}_psd.vtex_c")
             }
             Art::Rank { tier, kind } => {
                 format!(
@@ -220,6 +269,15 @@ pub struct ArtArchive {
     vpk: Vpk,
     archive: PathBuf,
     hero_paths: HashMap<(String, HeroArtKind), String>,
+    abilities: BTreeMap<String, AbilityEntry>,
+}
+
+/// What `abilities.vdata_c` says about one entry's images.
+#[derive(Debug, Default)]
+struct AbilityEntry {
+    is_item: bool,
+    icon: Option<String>,
+    shop: Option<String>,
 }
 
 impl ArtArchive {
@@ -238,10 +296,15 @@ impl ArtArchive {
             .read_resource_kv3(HEROES_PATH, BlockKind::DATA)
             .map(|doc| hero_paths(&doc))
             .unwrap_or_default();
+        let abilities = vpk
+            .read_resource_kv3(ABILITIES_PATH, BlockKind::DATA)
+            .map(|doc| ability_entries(&doc))
+            .unwrap_or_default();
         Ok(ArtArchive {
             vpk,
             archive,
             hero_paths,
+            abilities,
         })
     }
 
@@ -256,6 +319,21 @@ impl ArtArchive {
         {
             return path.clone();
         }
+        let listed = match *art {
+            Art::Ability { class_name } => {
+                self.abilities.get(class_name).and_then(|e| e.icon.as_ref())
+            }
+            Art::Item { class_name, kind } => {
+                self.abilities.get(class_name).and_then(|e| match kind {
+                    ItemArtKind::Icon => e.icon.as_ref(),
+                    ItemArtKind::Shop => e.shop.as_ref(),
+                })
+            }
+            _ => None,
+        };
+        if let Some(path) = listed {
+            return path.clone();
+        }
         art.rule_path()
     }
 
@@ -264,6 +342,41 @@ impl ArtArchive {
     /// A `true` answer does not promise it decodes: the format may be unsupported.
     pub fn contains(&self, art: &Art<'_>) -> bool {
         self.vpk.find(&self.path(art)).is_some()
+    }
+
+    /// Class names of the abilities that have an icon in the archive, sorted.
+    ///
+    /// Items are excluded; see [`ArtArchive::item_names`]. Pass each name to
+    /// [`Art::ability`].
+    pub fn ability_names(&self) -> Vec<&str> {
+        self.abilities
+            .iter()
+            .filter(|(_, e)| {
+                !e.is_item
+                    && e.icon
+                        .as_deref()
+                        .is_some_and(|p| self.vpk.find(p).is_some())
+            })
+            .map(|(name, _)| name.as_str())
+            .collect()
+    }
+
+    /// Class names of the items that have this image in the archive, sorted.
+    ///
+    /// Pass each name to [`Art::item`] with the same `kind`.
+    pub fn item_names(&self, kind: ItemArtKind) -> Vec<&str> {
+        self.abilities
+            .iter()
+            .filter(|(_, e)| e.is_item)
+            .filter(|(_, e)| {
+                let path = match kind {
+                    ItemArtKind::Icon => &e.icon,
+                    ItemArtKind::Shop => &e.shop,
+                };
+                path.as_deref().is_some_and(|p| self.vpk.find(p).is_some())
+            })
+            .map(|(name, _)| name.as_str())
+            .collect()
     }
 
     /// Decode the full-size image.
@@ -371,10 +484,48 @@ fn hero_paths(doc: &kv3::Document) -> HashMap<(String, HeroArtKind), String> {
     out
 }
 
+/// The image references of every entry in `abilities.vdata_c`.
+///
+/// Items and abilities share the table; `m_eAbilityType` tells them apart. Entries whose
+/// references are empty or not raster images (`.svg` icons) get no path.
+fn ability_entries(doc: &kv3::Document) -> BTreeMap<String, AbilityEntry> {
+    let mut out = BTreeMap::new();
+    let Some(root) = doc.root.as_object() else {
+        return out;
+    };
+    for (class_name, value) in root.iter() {
+        let Some(entry) = value.as_object() else {
+            continue;
+        };
+        let Some(kind) = entry.get("m_eAbilityType").and_then(kv3::Value::as_str) else {
+            continue;
+        };
+        let image = |field: &str| {
+            entry
+                .get(field)
+                .and_then(kv3::Value::as_str)
+                .and_then(compiled_path)
+        };
+        out.insert(
+            class_name.to_owned(),
+            AbilityEntry {
+                is_item: kind == "EAbilityType_Item",
+                icon: image("m_strAbilityImage"),
+                shop: image("m_strShopIconLarge"),
+            },
+        );
+    }
+    out
+}
+
 /// `file://{images}/heroes/bull_sm.psd` -> `panorama/images/heroes/bull_sm_psd.vtex_c`.
 fn compiled_path(reference: &str) -> Option<String> {
     let relative = reference.strip_prefix(IMAGES_PREFIX)?;
     let (stem, extension) = relative.rsplit_once('.')?;
+    // Vector icons compile to `vsvg_c`, not a texture.
+    if extension == "svg" {
+        return None;
+    }
     Some(format!("panorama/images/{stem}_{extension}.vtex_c"))
 }
 
@@ -734,6 +885,176 @@ mod tests {
         assert!(!archive.contains(&unlisted));
     }
 
+    const FORMAT_BC3: u8 = 2;
+
+    fn red2_marking(strings: &[&str]) -> source2::resource::Block {
+        use source2::kv3::{Document, Object, Value};
+        let deps = strings
+            .iter()
+            .map(|s| {
+                let mut o = Object::new();
+                o.insert("m_String", *s);
+                Value::from(o)
+            })
+            .collect();
+        let mut root = Object::new();
+        root.insert("m_SpecialDependencies", Value::array(deps));
+        Block::new(BlockKind::RED2, Document::new(root).to_bytes().unwrap())
+    }
+
+    /// One 4x4 BC3 block: alpha 100, colour 0xFFFF.
+    fn bc3_resource(marker: Option<&str>) -> Vec<u8> {
+        let mut head = Vec::new();
+        head.extend_from_slice(&1u16.to_le_bytes());
+        head.extend_from_slice(&0u16.to_le_bytes());
+        for r in [0.0f32; 4] {
+            head.extend_from_slice(&r.to_le_bytes());
+        }
+        head.extend_from_slice(&4u16.to_le_bytes());
+        head.extend_from_slice(&4u16.to_le_bytes());
+        head.extend_from_slice(&1u16.to_le_bytes());
+        head.push(FORMAT_BC3);
+        head.push(1);
+        head.extend_from_slice(&0u32.to_le_bytes());
+        head.extend_from_slice(&8u32.to_le_bytes());
+        head.extend_from_slice(&0u32.to_le_bytes());
+        let mut pixels = vec![100, 100, 0, 0, 0, 0, 0, 0];
+        pixels.extend_from_slice(&[0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0]);
+        let mut resource = Resource::new();
+        if let Some(marker) = marker {
+            resource
+                .blocks
+                .push(red2_marking(&["Texture Compiler Version", marker]));
+        }
+        resource.blocks.push(Block::new(BlockKind::DATA, head));
+        resource.with_trailing(pixels).to_bytes().unwrap()
+    }
+
+    const YCOCG: &str = "Texture Compiler Version Image YCoCg Conversion";
+
+    #[test]
+    fn a_ycocg_marked_texture_is_converted_to_rgb() {
+        let marked = Art::ability("ability_marked");
+        let plain = Art::ability("ability_plain");
+        let fx = Fixture::new(
+            "ycocg",
+            &[
+                (marked.rule_path(), bc3_resource(Some(YCOCG))),
+                (plain.rule_path(), bc3_resource(None)),
+            ],
+        );
+        let archive = ArtArchive::open(fx.path()).unwrap();
+
+        let pixel = |art: &Art| archive.image(art).unwrap().rgba[..4].to_vec();
+        // Y 100 with chroma 255 reads back as (100, 104, 92); unmarked BC3 is plain RGBA.
+        assert_eq!(pixel(&marked), [100, 104, 92, 255]);
+        assert_eq!(pixel(&plain), [255, 255, 255, 100]);
+        let (_, _, png) = decode_png(&archive.png(&marked).unwrap());
+        assert_eq!(png[..4], [100, 104, 92, 255]);
+    }
+
+    const ABILITIES: &str = r#"<!-- kv3 encoding:text:version{e21c7f3c-8a33-41c5-9977-a76d3a32aa0d} format:generic:version{7412167c-06e9-4698-aff2-e63eb59037e7} -->
+{
+    generic_data_type = "CitadelAbilityData"
+    ability_dash_slam =
+    {
+        m_eAbilityType = "EAbilityType_Signature"
+        m_strAbilityImage = "file://{images}/hud/abilities/hero/slam.psd"
+    }
+    ability_svg_only =
+    {
+        m_eAbilityType = "EAbilityType_Innate"
+        m_strAbilityImage = "file://{images}/hud/icons/icon_speed.svg"
+    }
+    upgrade_big =
+    {
+        m_eAbilityType = "EAbilityType_Item"
+        m_strAbilityImage = "file://{images}/upgrades/mods_armor/big.psd"
+        m_strShopIconLarge = "file://{images}/items/vitality/big.psd"
+    }
+    upgrade_no_shop =
+    {
+        m_eAbilityType = "EAbilityType_Item"
+        m_strAbilityImage = "file://{images}/upgrades/mods_armor/small.psd"
+        m_strShopIconLarge = ""
+    }
+    upgrade_file_missing =
+    {
+        m_eAbilityType = "EAbilityType_Item"
+        m_strAbilityImage = "file://{images}/upgrades/mods_armor/gone.psd"
+    }
+}
+"#;
+
+    fn abilities_resource() -> Vec<u8> {
+        use source2::ext::ResourceKv3;
+        let doc = source2::kv3::Document::from_text(ABILITIES).unwrap();
+        let mut resource = Resource::new();
+        resource
+            .put_kv3(BlockKind::DATA, &source2::kv3::Document::new(doc.root))
+            .unwrap();
+        resource.to_bytes().unwrap()
+    }
+
+    fn item_fixture(name: &str) -> Fixture {
+        let (bgra, _) = bgra_2x2();
+        let file = |path: &str| (path.to_owned(), vtex(2, 2, FORMAT_BGRA8888, bgra.clone()));
+        Fixture::new(
+            name,
+            &[
+                ("scripts/abilities.vdata_c".to_owned(), abilities_resource()),
+                file("panorama/images/hud/abilities/hero/slam_psd.vtex_c"),
+                file("panorama/images/upgrades/mods_armor/big_psd.vtex_c"),
+                file("panorama/images/items/vitality/big_psd.vtex_c"),
+                file("panorama/images/upgrades/mods_armor/small_psd.vtex_c"),
+            ],
+        )
+    }
+
+    #[test]
+    fn ability_and_item_art_come_from_the_abilities_table() {
+        let fx = item_fixture("items");
+        let archive = ArtArchive::open(fx.path()).unwrap();
+
+        let ability = Art::ability("ability_dash_slam");
+        assert_eq!(
+            archive.path(&ability),
+            "panorama/images/hud/abilities/hero/slam_psd.vtex_c"
+        );
+        assert!(archive.contains(&ability));
+        assert!(archive.image(&ability).is_ok());
+
+        let icon = Art::item("upgrade_big", ItemArtKind::Icon);
+        let shop = Art::item("upgrade_big", ItemArtKind::Shop);
+        assert_eq!(
+            archive.path(&icon),
+            "panorama/images/upgrades/mods_armor/big_psd.vtex_c"
+        );
+        assert_eq!(
+            archive.path(&shop),
+            "panorama/images/items/vitality/big_psd.vtex_c"
+        );
+        assert!(archive.contains(&icon) && archive.contains(&shop));
+
+        assert!(archive.contains(&Art::item("upgrade_no_shop", ItemArtKind::Icon)));
+        assert!(!archive.contains(&Art::item("upgrade_no_shop", ItemArtKind::Shop)));
+        assert!(!archive.contains(&Art::ability("ability_svg_only")));
+        assert!(!archive.contains(&Art::ability("ability_unknown")));
+    }
+
+    #[test]
+    fn art_can_be_enumerated_by_what_the_archive_holds() {
+        let fx = item_fixture("enumerate");
+        let archive = ArtArchive::open(fx.path()).unwrap();
+
+        assert_eq!(archive.ability_names(), ["ability_dash_slam"]);
+        assert_eq!(
+            archive.item_names(ItemArtKind::Icon),
+            ["upgrade_big", "upgrade_no_shop"]
+        );
+        assert_eq!(archive.item_names(ItemArtKind::Shop), ["upgrade_big"]);
+    }
+
     /// `DEADLOCK_CITADEL_DIR=".../Deadlock/game/citadel" cargo test -p deadlock-data --features art -- --ignored`
     #[test]
     #[ignore = "needs an installed game; set DEADLOCK_CITADEL_DIR"]
@@ -761,6 +1082,92 @@ mod tests {
         }
         assert!(checked > 40, "only {checked} checked");
         assert!(failures.is_empty(), "{failures:#?}");
+    }
+
+    #[test]
+    #[ignore = "needs an installed game; set DEADLOCK_CITADEL_DIR"]
+    fn every_listed_ability_and_item_image_decodes_or_is_a_known_gap() {
+        let dir = std::env::var("DEADLOCK_CITADEL_DIR").expect("set DEADLOCK_CITADEL_DIR");
+        let archive = ArtArchive::open(&dir).expect("archive");
+
+        let mut arts: Vec<Art> = archive
+            .ability_names()
+            .into_iter()
+            .map(Art::ability)
+            .collect();
+        for kind in ItemArtKind::ALL {
+            arts.extend(
+                archive
+                    .item_names(kind)
+                    .into_iter()
+                    .map(|n| Art::item(n, kind)),
+            );
+        }
+        assert!(arts.len() > 600, "only {} listed", arts.len());
+
+        let mut failures = Vec::new();
+        let mut gaps = 0;
+        for art in &arts {
+            match archive.image(art) {
+                Ok(image) => assert!(image.rgba.as_chunks::<4>().0.iter().any(|p| p[3] != 0)),
+                Err(Error::Parse(m)) if m.contains("unsupported") => gaps += 1,
+                Err(e) => failures.push(format!("{}: {e}", archive.path(art))),
+            }
+        }
+        println!("{} listed, {gaps} in unsupported formats", arts.len());
+        assert!(failures.is_empty(), "{failures:#?}");
+        assert!(
+            gaps * 10 < arts.len(),
+            "{gaps} of {} undecodable",
+            arts.len()
+        );
+    }
+
+    /// Some item images (about 65 of the ~900 icons and shop images) are YCoCg-marked BC3.
+    /// `DEADLOCK_ART_DUMP` also writes a few for eyeballing against the published images.
+    #[test]
+    #[ignore = "needs an installed game; set DEADLOCK_CITADEL_DIR"]
+    fn a_ycocg_item_icon_decodes_without_a_colour_cast() {
+        let dir = std::env::var("DEADLOCK_CITADEL_DIR").expect("set DEADLOCK_CITADEL_DIR");
+        let archive = ArtArchive::open(&dir).expect("archive");
+        let art = Art::item("upgrade_active_reload", ItemArtKind::Shop);
+        let path = archive.path(&art);
+        let bytes = archive
+            .vpk
+            .read(archive.vpk.find(&path).expect("file"))
+            .unwrap();
+        let resource = Resource::parse(&bytes).unwrap();
+        assert!(
+            source2::ext::ResourceTexture::texture_is_ycocg(&resource).unwrap(),
+            "{path}"
+        );
+
+        let image = archive.image(&art).unwrap();
+        if let Some(out) = std::env::var_os("DEADLOCK_ART_DUMP") {
+            let out = PathBuf::from(out);
+            for (name, art) in [
+                ("active_reload_shop", art),
+                (
+                    "rebuttal_shop",
+                    Art::item("upgrade_melee_rebuttal", ItemArtKind::Shop),
+                ),
+                ("wraith_lift", Art::ability("ability_golden_idol")),
+            ] {
+                archive
+                    .write_png(&art, out.join(format!("{name}.png")))
+                    .unwrap();
+            }
+        }
+        let (mut sum, mut count) = ([0u64; 3], 0u64);
+        for p in image.rgba.as_chunks::<4>().0.iter().filter(|p| p[3] > 200) {
+            (0..3).for_each(|c| sum[c] += u64::from(p[c]));
+            count += 1;
+        }
+        assert!(count > 100);
+        let mean = sum.map(|v| v as f64 / count as f64);
+        println!("channel means {mean:?}");
+        // Unconverted, the blue channel holds the 0..32 scale byte, so it stays near zero.
+        assert!(mean[2] > 20.0, "{mean:?}");
     }
 
     /// Vindicta's small icon is stored as an embedded PNG rather than a block format.
