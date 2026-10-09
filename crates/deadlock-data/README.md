@@ -41,6 +41,15 @@ supplies no ids, and a caller that expected a roster from an install gets none. 
 by default so that a consumer wanting localised names does not compile an archive reader
 it never calls.
 
+`art` (off by default, implies `vpk`) decodes the game's own hero portraits and rank
+badges from the VPK and re-encodes them as PNG, so an app can show a hero on release day
+without waiting for an API. `ArtArchive::open(citadel_dir)` parses the archive once;
+`png`, `image` and `write_png` then serve any `Art` request. File names come from the
+game's hero table, not from the class name: `hero_atlas` is `bull_*` on disk. A texture
+the decoder does not support (a few are embedded PNG) fails that one asset, so a caller
+can fall back to the API's URL for it. Decoded art is Valve's: cache it on the user's
+machine, keyed by game build, and never ship or commit it.
+
 One more, orthogonal to the sources: `serde` derives `Serialize`/`Deserialize` on the
 public catalog types. It is not `dep:serde` - this crate parses its vendored JSON with
 `serde_json` regardless, so the crate itself is mandatory here and only the derives are

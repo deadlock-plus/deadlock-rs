@@ -23,6 +23,9 @@ source2 = { workspace = true, optional = true, features = ["vpk", "resource", "k
 serde = { workspace = true }
 serde_json.workspace = true
 ureq = { workspace = true, optional = true }
+# Pure Rust, like the rest of the tree. No default features: only the encoder and the
+# decoder used by the round-trip tests are needed, not the CLI-oriented extras.
+png = { version = "0.18", optional = true, default-features = false }
 
 [features]
 default = ["bundled", "client"]
@@ -40,6 +43,12 @@ client = []
 # dependencies. Deadlock ships both codecs: `heroes` and `abilities` are zstd, the other
 # `scripts/*.vdata_c` are LZ4, so `source2` needs both.
 vpk = ["client", "dep:source2"]
+
+# Hero portraits and rank badges straight from the installed game: the `vtex_c` textures
+# in `pak01_dir.vpk`, decoded and re-encoded as PNG. Adds the texture decoder to `source2`
+# and a PNG encoder; off by default because a consumer that wants names has no use for
+# either.
+art = ["vpk", "dep:png", "source2/texture"]
 
 online = ["dep:ureq"]
 # Not `dep:serde`: this crate parses the vendored JSON with serde_json and the internal

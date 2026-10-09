@@ -33,6 +33,8 @@ pub enum Error {
     },
     /// No installed game could be located.
     GameNotFound,
+    /// The installed game's archive has no entry at this path.
+    AssetNotFound(String),
 }
 
 impl Error {
@@ -81,6 +83,7 @@ impl std::fmt::Display for Error {
                 source,
             } => write!(f, "request failed: {source}"),
             Error::GameNotFound => f.write_str("no Deadlock installation found"),
+            Error::AssetNotFound(path) => write!(f, "the game has no file at {path}"),
         }
     }
 }

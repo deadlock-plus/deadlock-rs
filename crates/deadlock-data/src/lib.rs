@@ -10,6 +10,7 @@
 //! | Vendored snapshot | `bundled` | yes | at build time | roster, English names, art |
 //! | Installed game | `client` | yes | exactly | names, in any of [`LANGUAGES`] |
 //! | Installed game | `vpk` | yes | exactly | roster: ids, class names, flags |
+//! | Installed game | `art` | yes | exactly | hero portraits and rank badges, as PNG |
 //! | deadlock-api.com | `online` | no | yes | roster, names for one language, art |
 //!
 //! `bundled` and `client` are on by default, which is the behaviour this crate has always
@@ -20,7 +21,9 @@
 //! `client` reads the loose localisation files for display names and needs nothing but
 //! std. `vpk` reads the game's own id tables out of the compiled `vdata_c` files in the
 //! VPK archives, which needs a VPK reader and a zstd decoder; it is what lets
-//! [`Source::Client`] answer for the roster.
+//! [`Source::Client`] answer for the roster. `art` goes one step further and decodes the
+//! game's own images (module `art`); it is off by default and is not a catalog source, so
+//! [`HeroArt`] keeps meaning the API's URLs.
 //!
 //! # Facets
 //!
@@ -65,6 +68,8 @@ pub mod ranks;
 pub mod resolve;
 pub mod source;
 
+#[cfg(feature = "art")]
+pub mod art;
 #[cfg(feature = "client")]
 pub mod install;
 #[cfg(feature = "vpk")]

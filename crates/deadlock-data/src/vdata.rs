@@ -166,7 +166,7 @@ fn read_document(citadel_dir: &Path, path: &str) -> Result<kv3::Document> {
 }
 
 /// Translate a VPK failure, keeping I/O distinguishable from a malformed archive.
-fn vpk_error(e: source2::vpk::Error, archive: &Path) -> Error {
+pub(crate) fn vpk_error(e: source2::vpk::Error, archive: &Path) -> Error {
     match e {
         source2::vpk::Error::Io { path, source } => Error::Io {
             // A missing archive is the normal "no game installed here" answer, and
