@@ -3297,7 +3297,7 @@ dependencies = [
 [[package]]
 name = "source2"
 version = "0.1.0"
-source = "git+https://github.com/deadlock-plus/source2-rs?rev=c7e4951f249da166de6ada428ace3ac07ff71d95#c7e4951f249da166de6ada428ace3ac07ff71d95"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=847d094be4da532777d0ab7d4e526118ead0e5dc#847d094be4da532777d0ab7d4e526118ead0e5dc"
 dependencies = [
  "source2-kv3",
  "source2-resource",
@@ -3308,7 +3308,7 @@ dependencies = [
 [[package]]
 name = "source2-kv3"
 version = "0.1.0"
-source = "git+https://github.com/deadlock-plus/source2-rs?rev=c7e4951f249da166de6ada428ace3ac07ff71d95#c7e4951f249da166de6ada428ace3ac07ff71d95"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=847d094be4da532777d0ab7d4e526118ead0e5dc#847d094be4da532777d0ab7d4e526118ead0e5dc"
 dependencies = [
  "lz4_flex",
  "ruzstd",
@@ -3318,17 +3318,20 @@ dependencies = [
 [[package]]
 name = "source2-resource"
 version = "0.1.0"
-source = "git+https://github.com/deadlock-plus/source2-rs?rev=c7e4951f249da166de6ada428ace3ac07ff71d95#c7e4951f249da166de6ada428ace3ac07ff71d95"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=847d094be4da532777d0ab7d4e526118ead0e5dc#847d094be4da532777d0ab7d4e526118ead0e5dc"
 
 [[package]]
 name = "source2-texture"
 version = "0.1.0"
-source = "git+https://github.com/deadlock-plus/source2-rs?rev=c7e4951f249da166de6ada428ace3ac07ff71d95#c7e4951f249da166de6ada428ace3ac07ff71d95"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=847d094be4da532777d0ab7d4e526118ead0e5dc#847d094be4da532777d0ab7d4e526118ead0e5dc"
+dependencies = [
+ "png 0.18.1",
+]
 
 [[package]]
 name = "source2-vpk"
 version = "0.1.0"
-source = "git+https://github.com/deadlock-plus/source2-rs?rev=c7e4951f249da166de6ada428ace3ac07ff71d95#c7e4951f249da166de6ada428ace3ac07ff71d95"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=847d094be4da532777d0ab7d4e526118ead0e5dc#847d094be4da532777d0ab7d4e526118ead0e5dc"
 
 [[package]]
 name = "stable_deref_trait"

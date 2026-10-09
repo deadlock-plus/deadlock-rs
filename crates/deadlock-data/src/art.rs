@@ -763,6 +763,23 @@ mod tests {
         assert!(failures.is_empty(), "{failures:#?}");
     }
 
+    /// Vindicta's small icon is stored as an embedded PNG rather than a block format.
+    #[test]
+    #[ignore = "needs an installed game; set DEADLOCK_CITADEL_DIR"]
+    fn an_embedded_png_hero_icon_writes_a_png() {
+        let dir = std::env::var("DEADLOCK_CITADEL_DIR").expect("set DEADLOCK_CITADEL_DIR");
+        let archive = ArtArchive::open(&dir).expect("archive");
+        let art = Art::hero("hero_hornet", HeroArtKind::Sm);
+        let dest = std::env::temp_dir().join("deadlock-data-art-hornet-sm.png");
+        let _ = std::fs::remove_file(&dest);
+
+        archive.write_png(&art, &dest).expect("write");
+        let (w, h, pixels) = decode_png(&std::fs::read(&dest).unwrap());
+        assert_eq!((w, h), (128, 128));
+        assert!(pixels.as_chunks::<4>().0.iter().any(|p| p[3] != 0));
+        let _ = std::fs::remove_file(&dest);
+    }
+
     #[test]
     #[ignore = "needs an installed game; set DEADLOCK_CITADEL_DIR"]
     fn a_real_png_round_trips_through_the_png_crate() {

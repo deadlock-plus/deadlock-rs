@@ -28,7 +28,7 @@ prost = "0.14"
 valveprotos = { git = "https://github.com/deadlock-api/deadlock-api", rev = "19a34aa9cedabd3374cb4af5c2d714520784ce1f", features = ["reflect", "gc-common", "gc-client"] }
 # `haste_core` rather than `haste`: the latter pulls in `haste_broadcast` (reqwest, tokio).
 haste_core = { git = "https://github.com/deadlock-api/deadlock-api", rev = "19a34aa9cedabd3374cb4af5c2d714520784ce1f" }
-source2 = { git = "https://github.com/deadlock-plus/source2-rs", rev = "c7e4951f249da166de6ada428ace3ac07ff71d95", default-features = false }
+source2 = { git = "https://github.com/deadlock-plus/source2-rs", rev = "847d094be4da532777d0ab7d4e526118ead0e5dc", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ureq = { version = "2", default-features = false, features = ["tls", "json"] }
