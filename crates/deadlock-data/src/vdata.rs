@@ -73,15 +73,15 @@ pub fn hero_roster(citadel_dir: impl AsRef<Path>) -> Result<Vec<Hero>> {
         if id == 0 {
             continue;
         }
+        let state = hero
+            .get("m_eHeroDevelopmentState")
+            .and_then(kv3::Value::as_str);
         heroes.push(Hero {
             id: HeroId(id),
             class_name: class_name.to_string(),
-            in_development: flag(hero, "m_bInDevelopment"),
+            in_development: in_development(flag(hero, "m_bInDevelopment"), state),
             disabled: flag(hero, "m_bDisabled"),
-            pre_release: hero
-                .get("m_eHeroDevelopmentState")
-                .and_then(kv3::Value::as_str)
-                == Some("EHeroDevState_PreRelease"),
+            pre_release: state == Some("EHeroDevState_PreRelease"),
             player_selectable: hero
                 .get("m_bPlayerSelectable")
                 .and_then(kv3::Value::as_bool),
@@ -142,6 +142,14 @@ fn kind_from_ability_type(tag: &str) -> ItemKind {
         // Signature, Ultimate, Innate and anything else Valve adds are all abilities.
         _ => ItemKind::Ability,
     }
+}
+
+/// `m_bInDevelopment` unless the hero says it is released.
+///
+/// Valve left the flag set on Baba after release, so an explicit `Release` state is the
+/// better evidence. Heroes without a state key (the sandbox placeholder) keep the flag.
+fn in_development(flag: bool, state: Option<&str>) -> bool {
+    flag && state != Some("EHeroDevState_Release")
 }
 
 /// A boolean field, treating absence as false.
@@ -254,6 +262,14 @@ pub fn accolades(citadel_dir: impl AsRef<Path>) -> Result<Vec<Accolade>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_explicit_release_state_overrides_a_stale_development_flag() {
+        assert!(!in_development(true, Some("EHeroDevState_Release")));
+        assert!(in_development(true, Some("EHeroDevState_PreRelease")));
+        assert!(in_development(true, None));
+        assert!(!in_development(false, None));
+    }
 
     /// Every shipped accolade carries an id and a resolvable flavour token.
     ///
