@@ -1,4 +1,5 @@
-//! Hero portraits, rank badges, ability and item icons read from the installed game.
+//! Hero portraits, rank badges, ability and item icons and the minimap read from the installed
+//! game.
 //!
 //! The textures are `vtex_c` resources in `pak01_dir.vpk`. [`ArtArchive`] opens the archive
 //! once, finds an asset by [`Art`] request, decodes the first mip (undoing the game's
@@ -32,6 +33,9 @@ const CLASS_PREFIX: &str = "hero_";
 const IMAGES_PREFIX: &str = "file://{images}/";
 const ABILITY_DIR: &str = "panorama/images/hud/abilities";
 const ITEM_DIR: &str = "panorama/images/items";
+const MINIMAP_DIR: &str = "panorama/images/minimap/base";
+const MINIMAP_MID_STEM: &str = "minimap_midtown_mid_psd";
+const MINIMAP_MATERIAL: &str = "materials/minimap/dl_midtown.vmat_c";
 
 /// The `heroes.vdata_c` field that names each image's source file.
 const HERO_FIELDS: [(HeroArtKind, &str); 6] = [
@@ -135,6 +139,19 @@ impl ItemArtKind {
     pub const ALL: [ItemArtKind; 2] = [ItemArtKind::Icon, ItemArtKind::Shop];
 }
 
+/// Which minimap image.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum MinimapArtKind {
+    /// The street-level map of the mid-town arena (`minimap_midtown_mid`), 1024x1024.
+    Mid,
+}
+
+impl MinimapArtKind {
+    /// Every kind.
+    pub const ALL: [MinimapArtKind; 1] = [MinimapArtKind::Mid];
+}
+
 /// One image in the game's files.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Art<'a> {
@@ -164,6 +181,11 @@ pub enum Art<'a> {
         /// Which image.
         kind: ItemArtKind,
     },
+    /// A minimap image.
+    Minimap {
+        /// Which image.
+        kind: MinimapArtKind,
+    },
 }
 
 impl<'a> Art<'a> {
@@ -185,6 +207,11 @@ impl<'a> Art<'a> {
     /// An item image.
     pub fn item(class_name: &'a str, kind: ItemArtKind) -> Self {
         Art::Item { class_name, kind }
+    }
+
+    /// A minimap image.
+    pub fn minimap(kind: MinimapArtKind) -> Self {
+        Art::Minimap { kind }
     }
 
     /// The texture's path by the naming rule alone: `hero_art_key` for heroes, the tier
@@ -226,6 +253,9 @@ impl<'a> Art<'a> {
                     kind.file_suffix()
                 )
             }
+            Art::Minimap {
+                kind: MinimapArtKind::Mid,
+            } => format!("{MINIMAP_DIR}/{MINIMAP_MID_STEM}.vtex_c"),
         }
     }
 }
@@ -270,6 +300,7 @@ pub struct ArtArchive {
     archive: PathBuf,
     hero_paths: HashMap<(String, HeroArtKind), String>,
     abilities: BTreeMap<String, AbilityEntry>,
+    minimap_mid: Option<String>,
 }
 
 /// What `abilities.vdata_c` says about one entry's images.
@@ -300,11 +331,13 @@ impl ArtArchive {
             .read_resource_kv3(ABILITIES_PATH, BlockKind::DATA)
             .map(|doc| ability_entries(&doc))
             .unwrap_or_default();
+        let minimap_mid = minimap_mid_path(&vpk);
         Ok(ArtArchive {
             vpk,
             archive,
             hero_paths,
             abilities,
+            minimap_mid,
         })
     }
 
@@ -331,6 +364,13 @@ impl ArtArchive {
             }
             _ => None,
         };
+        if let Art::Minimap {
+            kind: MinimapArtKind::Mid,
+        } = *art
+            && let Some(path) = &self.minimap_mid
+        {
+            return path.clone();
+        }
         if let Some(path) = listed {
             return path.clone();
         }
@@ -445,6 +485,58 @@ impl ArtArchive {
             })
             .map_err(io)
     }
+}
+
+/// The mid minimap's texture.
+///
+/// The file name carries a content hash that changes between patches
+/// (`minimap_midtown_mid_psd_dd4bcbf9.vtex_c`), so the name is taken from the material that
+/// draws it. Only when the material is missing or points at a file the archive lacks does
+/// the search fall back to the directory, where a hashed file wins over a bare one: the
+/// bare `minimap_midtown_mid_psd.vtex_c` is an uncompressed leftover.
+fn minimap_mid_path(vpk: &Vpk) -> Option<String> {
+    let material = vpk.read_path(MINIMAP_MATERIAL).ok();
+    let referenced = material.as_deref().and_then(|bytes| {
+        let needle = format!("{MINIMAP_DIR}/{MINIMAP_MID_STEM}");
+        let start = bytes
+            .windows(needle.len())
+            .position(|w| w == needle.as_bytes())?;
+        let end = bytes[start..]
+            .iter()
+            .position(|b| !(b.is_ascii_alphanumeric() || matches!(b, b'_' | b'/' | b'.')))
+            .map_or(bytes.len(), |n| start + n);
+        let text = std::str::from_utf8(&bytes[start..end]).ok()?;
+        let path = if text.ends_with("_c") {
+            text.to_owned()
+        } else {
+            format!("{text}_c")
+        };
+        vpk.find(&path).map(|_| path)
+    });
+    if referenced.is_some() {
+        return referenced;
+    }
+    let dir = format!("{MINIMAP_DIR}/");
+    let mut hashed = None;
+    let mut bare = None;
+    for entry in vpk.entries_under(MINIMAP_DIR) {
+        let Some(rest) = entry
+            .path
+            .strip_prefix(&dir)
+            .and_then(|n| n.strip_prefix(MINIMAP_MID_STEM))
+            .and_then(|n| n.strip_suffix(".vtex_c"))
+        else {
+            continue;
+        };
+        match rest.strip_prefix('_') {
+            Some(hash) if !hash.is_empty() && hash.bytes().all(|b| b.is_ascii_hexdigit()) => {
+                hashed = hashed.max(Some(entry.path.clone()));
+            }
+            None if rest.is_empty() => bare = Some(entry.path.clone()),
+            _ => {}
+        }
+    }
+    hashed.or(bare)
 }
 
 /// Every image the hero table names, keyed by class name.
@@ -691,6 +783,94 @@ mod tests {
             Art::rank(11, RankArtKind::Chalk).rule_path(),
             "panorama/images/ranked/badges/rank11_chalk_psd.vtex_c"
         );
+    }
+
+    const MID_HASHED: &str = "panorama/images/minimap/base/minimap_midtown_mid_psd_dd4bcbf9.vtex_c";
+    const MID_UNHASHED: &str = "panorama/images/minimap/base/minimap_midtown_mid_psd.vtex_c";
+    const MID_TUNNELS: &str = "panorama/images/minimap/base/minimap_midtown_mid_tunnels_psd.vtex_c";
+    const MID_MATERIAL: &str = "materials/minimap/dl_midtown.vmat_c";
+
+    fn minimap_files(with_material: Option<&str>) -> Vec<(String, Vec<u8>)> {
+        let (bgra, _) = bgra_2x2();
+        let other = vec![0u8; 16];
+        let mut files = vec![
+            (
+                MID_UNHASHED.to_owned(),
+                vtex(2, 2, FORMAT_BGRA8888, other.clone()),
+            ),
+            (MID_TUNNELS.to_owned(), vtex(2, 2, FORMAT_BGRA8888, other)),
+            (MID_HASHED.to_owned(), vtex(2, 2, FORMAT_BGRA8888, bgra)),
+        ];
+        if let Some(reference) = with_material {
+            let mut blob = b" junk".to_vec();
+            blob.extend_from_slice(reference.as_bytes());
+            blob.extend_from_slice(b" trailing");
+            files.push((MID_MATERIAL.to_owned(), blob));
+        }
+        files
+    }
+
+    #[test]
+    fn the_minimap_follows_the_materials_texture_reference() {
+        let art = Art::minimap(MinimapArtKind::Mid);
+        let fx = Fixture::new(
+            "minimap-material",
+            &minimap_files(Some(
+                "panorama/images/minimap/base/minimap_midtown_mid_psd_dd4bcbf9.vtex",
+            )),
+        );
+        let archive = ArtArchive::open(fx.path()).unwrap();
+
+        assert_eq!(archive.path(&art), MID_HASHED);
+        assert!(archive.contains(&art));
+        let (_, rgba) = bgra_2x2();
+        assert_eq!(archive.image(&art).unwrap().rgba, rgba);
+    }
+
+    #[test]
+    fn the_minimap_falls_back_to_the_hashed_file_by_prefix() {
+        let art = Art::minimap(MinimapArtKind::Mid);
+        let fx = Fixture::new("minimap-prefix", &minimap_files(None));
+        let archive = ArtArchive::open(fx.path()).unwrap();
+
+        assert_eq!(archive.path(&art), MID_HASHED);
+    }
+
+    #[test]
+    fn a_stale_material_reference_falls_back_to_the_prefix_search() {
+        let art = Art::minimap(MinimapArtKind::Mid);
+        let fx = Fixture::new(
+            "minimap-stale",
+            &minimap_files(Some(
+                "panorama/images/minimap/base/minimap_midtown_mid_psd_00000000.vtex",
+            )),
+        );
+        let archive = ArtArchive::open(fx.path()).unwrap();
+
+        assert_eq!(archive.path(&art), MID_HASHED);
+    }
+
+    #[test]
+    fn the_minimap_uses_the_unhashed_file_when_it_is_the_only_one() {
+        let art = Art::minimap(MinimapArtKind::Mid);
+        let files: Vec<_> = minimap_files(None)
+            .into_iter()
+            .filter(|(path, _)| path == MID_UNHASHED || path == MID_TUNNELS)
+            .collect();
+        let fx = Fixture::new("minimap-unhashed", &files);
+        let archive = ArtArchive::open(fx.path()).unwrap();
+
+        assert_eq!(archive.path(&art), MID_UNHASHED);
+    }
+
+    #[test]
+    fn a_missing_minimap_is_reported() {
+        let art = Art::minimap(MinimapArtKind::Mid);
+        let fx = Fixture::new("minimap-none", &[]);
+        let archive = ArtArchive::open(fx.path()).unwrap();
+
+        assert!(!archive.contains(&art));
+        assert!(matches!(archive.image(&art), Err(Error::AssetNotFound(_))));
     }
 
     #[test]
@@ -1214,5 +1394,26 @@ mod tests {
             assert!(direct.rgba.as_chunks::<4>().0.iter().any(|p| p[3] != 0));
         }
         let _ = std::fs::remove_dir_all(&out);
+    }
+    #[test]
+    #[ignore = "needs an installed game; set DEADLOCK_CITADEL_DIR"]
+    fn the_real_mid_minimap_decodes_to_a_1024_square() {
+        let dir = std::env::var("DEADLOCK_CITADEL_DIR").expect("set DEADLOCK_CITADEL_DIR");
+        let archive = ArtArchive::open(&dir).expect("archive");
+        let art = Art::minimap(MinimapArtKind::Mid);
+
+        assert!(archive.contains(&art), "{}", archive.path(&art));
+        let image = archive.image(&art).expect("decode");
+        assert_eq!((image.width, image.height), (1024, 1024));
+        assert_eq!(image.rgba.len(), 1024 * 1024 * 4);
+        let opaque = image
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|p| p[3] > 0)
+            .count();
+        assert!(opaque > 100_000, "{opaque}");
+        archive.png(&art).expect("png");
     }
 }
