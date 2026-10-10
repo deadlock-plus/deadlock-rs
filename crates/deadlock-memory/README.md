@@ -29,6 +29,11 @@ task port (`mach_vm_read_overwrite`) on macOS, for a Windows build under Wine. T
 backend is best effort: it compiles, but has not been run against a real process, and
 `task_for_pid` needs root.
 
+On Linux, client-module checks use the full mapped filename, excluding Steam's own
+client libraries when selecting the game process. Wine may map only a PE header from
+its file and copy the sections into anonymous mappings. The backend reads the header's
+`SizeOfImage` to include those sections, bounded by contiguous anonymous mappings.
+
 On Linux, Yama's `ptrace_scope` decides whether another process may be read. A refused read
 is reported as `Error::PtraceDenied` with advice matched to the current setting.
 
