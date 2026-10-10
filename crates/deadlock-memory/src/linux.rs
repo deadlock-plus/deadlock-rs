@@ -216,10 +216,143 @@ impl MemoryReader for LinuxProcess {
     }
 
     fn modules(&self) -> Result<Vec<Module>> {
-        Ok(procmaps::modules_from_maps(&self.maps()?))
+        Ok(modules_with_images(self, &self.maps()?))
     }
 
     fn regions(&self) -> Result<Vec<Region>> {
         Ok(procmaps::regions_from_maps(&self.maps()?))
+    }
+}
+
+fn modules_with_images(mem: &dyn MemoryReader, entries: &[procmaps::MapEntry]) -> Vec<Module> {
+    let mut modules = procmaps::modules_from_maps(entries);
+    for module in &mut modules {
+        let mut header = [0; 4096];
+        let read = mem.read_partial(module.base, &mut header);
+        let Some(size) = pe_image_size(&header[..read]) else {
+            continue;
+        };
+        if size <= module.size {
+            continue;
+        }
+        let Some(end) = module.base.checked_add(size as u64) else {
+            continue;
+        };
+        let Some(mapped_end) = module.base.checked_add(module.size as u64) else {
+            continue;
+        };
+        let mut covered = mapped_end;
+        // Wine may map only the PE header from the file and copy its sections anonymously.
+        // SizeOfImage bounds the extension; never absorb a neighbour's file or a gap.
+        for entry in entries.iter().filter(|e| e.start >= mapped_end) {
+            if covered >= end {
+                break;
+            }
+            if entry.start != covered || entry.inode != 0 || entry.path.is_some() {
+                break;
+            }
+            covered = entry.end;
+        }
+        if covered >= end {
+            module.size = size;
+        }
+    }
+    modules
+}
+
+fn pe_image_size(header: &[u8]) -> Option<usize> {
+    if header.get(..2)? != b"MZ" {
+        return None;
+    }
+    let offset = u32::from_le_bytes(header.get(0x3c..0x40)?.try_into().ok()?) as usize;
+    let nt = header.get(offset..offset.checked_add(84)?)?;
+    let optional_size = u16::from_le_bytes(nt[20..22].try_into().ok()?);
+    let magic = u16::from_le_bytes(nt[24..26].try_into().ok()?);
+    if &nt[..4] != b"PE\0\0" || optional_size < 60 || !matches!(magic, 0x10b | 0x20b) {
+        return None;
+    }
+    let size = u32::from_le_bytes(nt[80..84].try_into().ok()?) as usize;
+    // SizeOfImage comes from the target; keep a corrupt header from driving a huge read.
+    (size > 0 && size <= crate::region::MAX_REGION).then_some(size)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mock::MockMemory;
+
+    const PROTON_MAPS: &str = "\
+1000-2000 r--p 00000000 08:01 100 /game/client.dll
+2000-3000 r-xp 00000000 00:00 0
+3000-4000 r--p 00000000 00:00 0
+4000-7000 rw-p 00000000 00:00 0
+7000-8000 r--p 00000000 08:01 200 /game/engine2.dll
+";
+
+    fn pe_header(image_size: u32, magic: u16) -> Vec<u8> {
+        let mut header = vec![0; 4096];
+        header[..2].copy_from_slice(b"MZ");
+        header[0x3c..0x40].copy_from_slice(&0x80u32.to_le_bytes());
+        header[0x80..0x84].copy_from_slice(b"PE\0\0");
+        header[0x94..0x96].copy_from_slice(&0xf0u16.to_le_bytes());
+        header[0x98..0x9a].copy_from_slice(&magic.to_le_bytes());
+        header[0xd0..0xd4].copy_from_slice(&image_size.to_le_bytes());
+        header
+    }
+
+    #[test]
+    fn proton_pe_module_includes_anonymous_sections_up_to_size_of_image() {
+        for magic in [0x10b, 0x20b] {
+            let mut mem = MockMemory::new(1);
+            mem.write(0x1000, &pe_header(0x5000, magic));
+            let modules = modules_with_images(&mem, &procmaps::parse_maps(PROTON_MAPS));
+            let client = modules.iter().find(|m| m.name == "client.dll").unwrap();
+            assert_eq!(client.base, 0x1000);
+            assert_eq!(client.size, 0x5000);
+        }
+    }
+
+    #[test]
+    fn a_pe_image_does_not_extend_across_a_mapping_gap_or_another_file() {
+        for maps in [
+            PROTON_MAPS.replace("3000-4000 r--p 00000000 00:00 0\n", ""),
+            PROTON_MAPS.replace(
+                "3000-4000 r--p 00000000 00:00 0",
+                "3000-4000 r--p 00000000 08:01 200 /game/other.dll",
+            ),
+        ] {
+            let mut mem = MockMemory::new(1);
+            mem.write(0x1000, &pe_header(0x5000, 0x20b));
+            let modules = modules_with_images(&mem, &procmaps::parse_maps(&maps));
+            let client = modules.iter().find(|m| m.name == "client.dll").unwrap();
+            assert_eq!(client.size, 0x1000);
+        }
+    }
+
+    #[test]
+    fn unreadable_non_pe_and_invalid_headers_preserve_the_mapping_span() {
+        let mut non_pe = pe_header(0x5000, 0x20b);
+        non_pe[..4].copy_from_slice(b"\x7fELF");
+        let mut bad_offset = pe_header(0x5000, 0x20b);
+        bad_offset[0x3c..0x40].copy_from_slice(&u32::MAX.to_le_bytes());
+        let mut bad_signature = pe_header(0x5000, 0x20b);
+        bad_signature[0x80..0x84].fill(0);
+        for header in [
+            Vec::new(),
+            non_pe,
+            bad_offset,
+            bad_signature,
+            pe_header(0x5000, 0x20b)[..0xa0].to_vec(),
+            pe_header(0x5000, 0),
+            pe_header(0x8000_1000, 0x20b),
+        ] {
+            let mut mem = MockMemory::new(1);
+            if !header.is_empty() {
+                mem.write(0x1000, &header);
+            }
+            let modules = modules_with_images(&mem, &procmaps::parse_maps(PROTON_MAPS));
+            let client = modules.iter().find(|m| m.name == "client.dll").unwrap();
+            assert_eq!(client.size, 0x1000);
+        }
     }
 }

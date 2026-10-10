@@ -116,7 +116,16 @@ pub fn match_mac_process<'a>(
 /// Matches the Windows image under Proton and the native shared object, which is
 /// `libclient.so`.
 pub fn maps_mention_client(maps: &str) -> bool {
-    maps.contains("client.dll") || maps.contains("client.so")
+    crate::procmaps::parse_maps(maps)
+        .iter()
+        .filter(|entry| entry.is_file_backed())
+        .any(|entry| {
+            entry.file_name().is_some_and(|name| {
+                ["client.dll", "client.so", "libclient.so"]
+                    .iter()
+                    .any(|client| name.eq_ignore_ascii_case(client))
+            })
+        })
 }
 
 /// Choose the process to attach to.
@@ -462,6 +471,43 @@ mod tests {
         assert!(!maps_mention_client(
             "1-2 r--p 0 0:0 1 /x/win64/engine2.dll\n"
         ));
+    }
+
+    #[test]
+    fn steam_and_other_client_libraries_do_not_identify_the_game() {
+        for path in [
+            "/steam/linux64/steamclient.so",
+            "/proton/lib/wine/x86_64-unix/lsteamclient.so",
+            "/proton/lib/wine/x86_64-windows/lsteamclient.dll",
+            "/game/bin/win64/panoramauiclient.dll",
+            "/usr/lib/libwayland-client.so.0.26.0",
+        ] {
+            let maps = format!("1-2 r--p 0 0:0 1 {path}\n");
+            assert!(!maps_mention_client(&maps), "{path}");
+        }
+    }
+
+    #[test]
+    fn proton_game_beats_a_steam_launcher_with_steamclient_mapped() {
+        let launcher = b"c:\\windows\\system32\\steam.exe\0S:\\common\\Deadlock\\game\\bin\\win64\\deadlock.exe\0";
+        let game = b"S:\\common\\Deadlock\\game\\bin\\win64\\deadlock.exe\0";
+        let launcher_maps =
+            "7f9e15200000-7f9e17e81000 r-xp 00000000 08:01 100 /steam/linux64/steamclient.so\n";
+        let game_maps =
+            "180000000-184000000 r-xp 00000000 08:01 200 /game/citadel/bin/win64/client.dll\n";
+        let candidates = [
+            cand(
+                10,
+                match_cmdline(launcher, Some("steam.exe\n"), EXE).unwrap(),
+                maps_mention_client(launcher_maps),
+            ),
+            cand(
+                20,
+                match_cmdline(game, Some("MainThrd\n"), EXE).unwrap(),
+                maps_mention_client(game_maps),
+            ),
+        ];
+        assert_eq!(pick_pid(&candidates), Some(20));
     }
 
     fn procargs(argc: i32, exec: &str, pad: usize, args: &[&str]) -> Vec<u8> {

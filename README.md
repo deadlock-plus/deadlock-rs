@@ -194,7 +194,7 @@ the replay CDN.
 | | Status |
 |---|---|
 | Windows | Works, and is tested against a live client |
-| Linux with Proton | Implemented and compiles. The `process_vm_readv` path is untested |
+| Linux with Proton | Hideout, Street Brawl and 12-player normal-match reads verified on CachyOS with Proton-CachyOS; other setups untested |
 | Linux native | The memory code is done. Signatures need deriving if a native build ships |
 | macOS | Not attempted. There is probably no client to read |
 
