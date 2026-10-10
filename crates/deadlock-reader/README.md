@@ -62,6 +62,7 @@ Toolhelp32 snapshot family, `RegGetValueW` and `CloseHandle`.
 | `schema` | Schema walk -> `class -> field -> offset` index, plus enums |
 | `entity` | Entity list walk, handle masking, per-tick snapshot |
 | `snapshot` | Match state, modes, scoreboard, objectives, Hideout detection |
+| `netchan` | The user's own ping, packet loss and jitter, from the engine's net channel |
 | `timers` | Match clock and objective timers, each tagged with its provenance |
 | `tunables` | Patch-sensitive constants (cadences, class names), overridable at runtime |
 | `cache` | Optional pinned-entity cache that skips the walk on most ticks |

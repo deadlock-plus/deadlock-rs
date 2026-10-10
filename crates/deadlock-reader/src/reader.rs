@@ -9,6 +9,7 @@ use crate::drift::{self, Drift};
 use crate::entity::{EntityLayout, EntitySnapshot, NameCache};
 use crate::error::{Error, Result};
 use crate::globals::Globals;
+use crate::netchan::{NetChanAnchors, NetChanError, NetChanStats};
 use crate::schema::{SchemaIndex, SchemaLayout};
 use crate::snapshot::{LiveSnapshot, LiveState, Loading};
 use crate::tunables::Tunables;
@@ -85,6 +86,8 @@ pub struct Reader {
     drift: RwLock<DriftLog>,
     /// Entity count from the last walk, used to pre-size the next one.
     entity_hint: AtomicUsize,
+    /// Net channel anchors, resolved on first use and kept once they have resolved.
+    net_chan: Mutex<Option<NetChanAnchors>>,
 }
 
 impl std::fmt::Debug for Reader {
@@ -206,6 +209,7 @@ impl Reader {
             names: Mutex::new(NameCache::default()),
             drift: RwLock::new(DriftLog::default()),
             entity_hint: AtomicUsize::new(0),
+            net_chan: Mutex::new(None),
         })
     }
 
@@ -479,6 +483,23 @@ impl Reader {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clear();
+    }
+
+    /// The user's own ping, packet loss and jitter to the game server.
+    ///
+    /// Resolves `engine2.dll` and `networksystem.dll` on first use and reuses the result.
+    /// [`NetChanError::Unavailable`] means the game is not connected to a server.
+    pub fn net_chan_stats(&self) -> std::result::Result<NetChanStats, NetChanError> {
+        let mut slot = self
+            .net_chan
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let anchors = match *slot {
+            Some(a) => a,
+            None => *slot.insert(NetChanAnchors::resolve(self.mem.as_ref())?),
+        };
+        drop(slot);
+        anchors.read(self.mem.as_ref())
     }
 
     /// Build a high-level match snapshot.

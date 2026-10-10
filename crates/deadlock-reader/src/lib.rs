@@ -59,6 +59,8 @@ pub mod drift;
 pub mod entity;
 #[cfg(feature = "events")]
 pub mod events;
+/// The user's own ping, packet loss and jitter, read from the engine's net channel.
+pub mod netchan;
 pub mod reader;
 pub mod schema;
 pub mod snapshot;
