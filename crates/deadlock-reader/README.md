@@ -368,13 +368,15 @@ lands on addresses confirmed by disassembly.
 
 **Not exercised:** the replay CDN path. The crate builds the URL but has no downloader or
 decoder; `deadlock-replay` reads the metadata file. Game Coordinator objects live in
-`deadlock-walker`. A full 12-player live match has not been observed, and Ranked / Street Brawl / custom
-lobby mode values come from the schema rather than from seeing them live.
+`deadlock-walker`. Ranked / custom lobby mode values come from the schema rather than from seeing
+them live.
 
-**The Linux backend has never run.** It compiles for `x86_64-unknown-linux-musl` and its
-parsing and ABI-selection logic are covered by tests using recorded `/proc/<pid>/maps`
-fixtures, but no `process_vm_readv` call has ever been made. Treat first contact as
-debugging, not as a regression.
+**Linux with Proton has been exercised in the Hideout, Street Brawl and a normal match**
+on CachyOS with Proton-CachyOS. Live attachment resolved the globals and runtime schema,
+and repeated Hideout snapshots returned three players through `process_vm_readv`. Deadlock+ displayed
+both teams, eight players, their stats and the match clock during a Street Brawl match.
+Its updated Live feed also returned three consecutive normal-match snapshots with all
+twelve players and engine ping. Ranked, custom lobbies and other Proton setups remain untested.
 
 ### After a Deadlock update
 
@@ -419,7 +421,7 @@ from a literal, so the pairing was read off surrounding context rather than prov
 | | Status |
 |---|---|
 | Windows | Works; exercised against a live client |
-| Linux + Proton | Implemented, compile-verified; the `process_vm_readv` path is untested |
+| Linux + Proton | Hideout, Street Brawl and 12-player normal-match reads verified on CachyOS with Proton-CachyOS; other setups untested |
 | Linux native | Plumbing done; needs signatures and layouts derived when a native build ships |
 | macOS | Not attempted; probably no client to read |
 
@@ -454,7 +456,10 @@ Three Proton details are handled: pid discovery goes through `/proc/<pid>/cmdlin
 than `comm` (truncated to 15 bytes) and prefers the process with a client module mapped,
 since a prefix runs several wine processes; module lookup is by basename, because
 pressure-vessel's mount namespace makes the paths in `maps` container-relative; and
-`[vvar]`/`[vsyscall]` are excluded from the scan set.
+`[vvar]`/`[vsyscall]` are excluded from the scan set. Client-module checks match the full
+filename so Steam libraries cannot make a launcher look like the game. Wine can map only
+a PE header from its file; the Linux backend uses the mapped header's `SizeOfImage` to
+include contiguous anonymous sections without crossing a gap or another file mapping.
 
 **Permissions are the thing that will actually bite users.** Yama's `ptrace_scope` is `1`
 on most distributions, which makes reads of a non-child fail `EPERM`. That is detected up
