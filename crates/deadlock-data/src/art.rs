@@ -33,6 +33,7 @@ const CLASS_PREFIX: &str = "hero_";
 const IMAGES_PREFIX: &str = "file://{images}/";
 const ABILITY_DIR: &str = "panorama/images/hud/abilities";
 const ITEM_DIR: &str = "panorama/images/items";
+const MINIMAP_ICON_DIR: &str = "panorama/images/minimap";
 const MINIMAP_DIR: &str = "panorama/images/minimap/base";
 const MINIMAP_MID_STEM: &str = "minimap_midtown_mid_psd";
 const MINIMAP_MATERIAL: &str = "materials/minimap/dl_midtown.vmat_c";
@@ -145,11 +146,68 @@ impl ItemArtKind {
 pub enum MinimapArtKind {
     /// The street-level map of the mid-town arena (`minimap_midtown_mid`), 1024x1024.
     Mid,
+    /// A minimap marker icon (`boss_health`, `neutral_small`, ...), by file-name stem.
+    ///
+    /// Build it with [`MinimapArtKind::icon`], which accepts only stems that name a file
+    /// directly under `panorama/images/minimap`.
+    Icon(MinimapIcon),
 }
 
 impl MinimapArtKind {
-    /// Every kind.
+    /// Every kind that needs no argument. [`MinimapArtKind::Icon`] is not listed: there is one
+    /// per stem.
     pub const ALL: [MinimapArtKind; 1] = [MinimapArtKind::Mid];
+
+    /// A minimap marker icon by file-name stem, without the `_psd` suffix or extension.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::AssetNotFound`] when the stem is empty, longer than 64 bytes, or holds
+    /// anything other than `a-z`, `0-9` and `_`. That keeps a stem from reaching into another
+    /// directory or naming a file that is not an icon.
+    pub fn icon(stem: &str) -> Result<Self> {
+        let valid = !stem.is_empty()
+            && stem.len() <= MinimapIcon::MAX_LEN
+            && stem
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+        if !valid {
+            return Err(Error::AssetNotFound(format!(
+                "{MINIMAP_ICON_DIR}/{stem}_psd.vtex_c"
+            )));
+        }
+        let mut buf = [0; MinimapIcon::MAX_LEN];
+        buf[..stem.len()].copy_from_slice(stem.as_bytes());
+        Ok(MinimapArtKind::Icon(MinimapIcon {
+            buf,
+            len: stem.len() as u8,
+        }))
+    }
+}
+
+/// A validated minimap icon stem, held inline so [`Art`] stays `Copy`.
+///
+/// Only [`MinimapArtKind::icon`] makes one.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MinimapIcon {
+    buf: [u8; MinimapIcon::MAX_LEN],
+    len: u8,
+}
+
+impl MinimapIcon {
+    const MAX_LEN: usize = 64;
+
+    /// The file-name stem.
+    pub fn as_str(&self) -> &str {
+        // The constructor admits ASCII only, so this cannot fail.
+        std::str::from_utf8(&self.buf[..usize::from(self.len)]).unwrap_or_default()
+    }
+}
+
+impl std::fmt::Debug for MinimapIcon {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("MinimapIcon").field(&self.as_str()).finish()
+    }
 }
 
 /// One image in the game's files.
@@ -256,6 +314,9 @@ impl<'a> Art<'a> {
             Art::Minimap {
                 kind: MinimapArtKind::Mid,
             } => format!("{MINIMAP_DIR}/{MINIMAP_MID_STEM}.vtex_c"),
+            Art::Minimap {
+                kind: MinimapArtKind::Icon(icon),
+            } => format!("{MINIMAP_ICON_DIR}/{}_psd.vtex_c", icon.as_str()),
         }
     }
 }
@@ -873,6 +934,76 @@ mod tests {
         assert!(matches!(archive.image(&art), Err(Error::AssetNotFound(_))));
     }
 
+    const ICON_BOSS: &str = "panorama/images/minimap/boss_health_psd.vtex_c";
+
+    #[test]
+    fn a_minimap_icon_stem_builds_its_path() {
+        let kind = MinimapArtKind::icon("boss_health_fill_t2").unwrap();
+        assert_eq!(
+            Art::minimap(kind).rule_path(),
+            "panorama/images/minimap/boss_health_fill_t2_psd.vtex_c"
+        );
+    }
+
+    #[test]
+    fn a_minimap_icon_stem_takes_only_lowercase_letters_digits_and_underscores() {
+        for stem in ["boss_health", "neutral_small", "a", "t2_0", "_x"] {
+            assert!(MinimapArtKind::icon(stem).is_ok(), "{stem}");
+        }
+        let too_long = "a".repeat(65);
+        for stem in [
+            "",
+            "..",
+            "../boss_health",
+            "base/minimap_midtown_mid",
+            r"base\minimap_midtown_mid",
+            "boss_health.vtex_c",
+            "Boss_Health",
+            "boss health",
+            "boss-health",
+            "boss_health\0",
+            "bo\u{ff}ss",
+            too_long.as_str(),
+        ] {
+            assert!(
+                matches!(MinimapArtKind::icon(stem), Err(Error::AssetNotFound(_))),
+                "{stem:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_minimap_icon_decodes_from_the_minimap_directory() {
+        let (bgra, rgba) = bgra_2x2();
+        let fx = Fixture::new(
+            "minimap-icon",
+            &[
+                (ICON_BOSS.to_owned(), vtex(2, 2, FORMAT_BGRA8888, bgra)),
+                (
+                    MID_UNHASHED.to_owned(),
+                    vtex(2, 2, FORMAT_BGRA8888, vec![0; 16]),
+                ),
+            ],
+        );
+        let archive = ArtArchive::open(fx.path()).unwrap();
+        let art = Art::minimap(MinimapArtKind::icon("boss_health").unwrap());
+
+        assert_eq!(archive.path(&art), ICON_BOSS);
+        assert!(archive.contains(&art));
+        assert_eq!(archive.image(&art).unwrap().rgba, rgba);
+        assert!(archive.png(&art).unwrap().starts_with(b"\x89PNG"));
+    }
+
+    #[test]
+    fn a_minimap_icon_the_archive_lacks_is_reported() {
+        let fx = Fixture::new("minimap-icon-none", &[]);
+        let archive = ArtArchive::open(fx.path()).unwrap();
+        let art = Art::minimap(MinimapArtKind::icon("boss_health").unwrap());
+
+        assert!(!archive.contains(&art));
+        assert!(matches!(archive.image(&art), Err(Error::AssetNotFound(p)) if p == ICON_BOSS));
+    }
+
     #[test]
     fn a_stored_texture_decodes_to_rgba_and_encodes_to_png() {
         let (bgra, rgba) = bgra_2x2();
@@ -1415,5 +1546,42 @@ mod tests {
             .count();
         assert!(opaque > 100_000, "{opaque}");
         archive.png(&art).expect("png");
+    }
+
+    #[test]
+    #[ignore = "needs an installed game; set DEADLOCK_CITADEL_DIR"]
+    fn real_minimap_icons_decode_to_non_empty_pngs() {
+        let dir = std::env::var("DEADLOCK_CITADEL_DIR").expect("set DEADLOCK_CITADEL_DIR");
+        let archive = ArtArchive::open(&dir).expect("archive");
+
+        for stem in [
+            "boss_health",
+            "boss_health_fill_t2",
+            "boss_health_final_stage2",
+            "neutral_small",
+            "minimap_shop",
+            "soul_jar_marker_return",
+            "player_cone",
+        ] {
+            let art = Art::minimap(MinimapArtKind::icon(stem).unwrap());
+            assert!(archive.contains(&art), "{}", archive.path(&art));
+            let image = archive.image(&art).expect(stem);
+            assert!((1..=2048).contains(&image.width), "{stem} {}", image.width);
+            assert!(
+                (1..=2048).contains(&image.height),
+                "{stem} {}",
+                image.height
+            );
+            assert_eq!(image.rgba.len(), (image.width * image.height * 4) as usize);
+            assert!(
+                image.rgba.as_chunks::<4>().0.iter().any(|p| p[3] != 0),
+                "{stem}"
+            );
+            let png = archive.png(&art).expect(stem);
+            let (w, h, pixels) = decode_png(&png);
+            assert_eq!((w, h), (image.width, image.height), "{stem}");
+            assert!(!pixels.is_empty(), "{stem}");
+            println!("{stem}: {w}x{h} png {} bytes", png.len());
+        }
     }
 }
