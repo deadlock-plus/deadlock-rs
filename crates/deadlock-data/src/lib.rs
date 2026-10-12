@@ -73,6 +73,8 @@ pub mod art;
 #[cfg(feature = "client")]
 pub mod install;
 #[cfg(feature = "vpk")]
+pub mod map;
+#[cfg(feature = "vpk")]
 pub mod vdata;
 
 #[cfg(feature = "client")]
