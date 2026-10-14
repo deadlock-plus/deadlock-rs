@@ -206,7 +206,11 @@ pub trait MemoryReader: Send + Sync {
             let want = STEP.min(max - off);
             // Wrapping: `addr` came from the game and can sit anywhere, including where
             // a plain `+` overflows - which panics in a debug build and wraps in release.
-            let got = self.read_partial(addr.wrapping_add(off as u64), &mut buf[..want]);
+            // Clamped because the count is backend-reported and has been seen far larger
+            // than the request; slicing with it unchecked panics.
+            let got = self
+                .read_partial(addr.wrapping_add(off as u64), &mut buf[..want])
+                .min(want);
             if got == 0 {
                 if off == 0 {
                     return Err(Error::ShortRead { addr, want, got: 0 });
@@ -333,6 +337,34 @@ mod tests {
         let mut m = MockMemory::new(1);
         m.write(0x1000, &[b'z'; 200]);
         assert_eq!(m.read_cstr(0x1000, 8).unwrap(), "zzzzzzzz");
+    }
+
+    /// A backend reporting more bytes than the buffer holds, as Windows field crash reports
+    /// showed: the byte count was a heap pointer.
+    struct OverReporting;
+
+    impl MemoryReader for OverReporting {
+        fn pid(&self) -> u32 {
+            1
+        }
+        fn read_into(&self, _addr: u64, _buf: &mut [u8]) -> Result<()> {
+            unreachable!()
+        }
+        fn read_partial(&self, _addr: u64, buf: &mut [u8]) -> usize {
+            buf.fill(b'a');
+            0x18A_D0ED_5850
+        }
+        fn modules(&self) -> Result<Vec<Module>> {
+            Ok(Vec::new())
+        }
+        fn regions(&self) -> Result<Vec<Region>> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[test]
+    fn an_over_reported_byte_count_is_clamped_to_the_request() {
+        assert_eq!(OverReporting.read_cstr(0x1000, 8).unwrap(), "aaaaaaaa");
     }
 
     #[test]

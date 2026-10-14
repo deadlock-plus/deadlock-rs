@@ -8,7 +8,7 @@ use std::ffi::c_void;
 use std::path::PathBuf;
 
 use windows_sys::Win32::Foundation::{
-    CloseHandle, FALSE, GetLastError, HANDLE, INVALID_HANDLE_VALUE,
+    CloseHandle, ERROR_PARTIAL_COPY, FALSE, GetLastError, HANDLE, INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
@@ -202,23 +202,24 @@ impl MemoryReader for Process {
             return 0;
         }
         let mut got: usize = 0;
-        // The return value is deliberately ignored: `got` is meaningful either way. A
-        // range running into an inaccessible page fails with `STATUS_PARTIAL_COPY` having
-        // already transferred the bytes up to it, and reporting zero there throws away
-        // everything that was read. `got` starts at zero, so a failure that transferred
-        // nothing still reports nothing.
-        // SAFETY: as in `read_into`. The return value is ignored on purpose (see above),
-        // which changes nothing about the call's soundness - `got` is written either way.
-        unsafe {
+        // SAFETY: as in `read_into`.
+        let ok = unsafe {
             ReadProcessMemory(
                 self.handle,
                 addr as *const c_void,
                 buf.as_mut_ptr() as *mut c_void,
                 buf.len(),
                 &mut got,
-            );
+            )
+        };
+        // A range running into an inaccessible page fails with `ERROR_PARTIAL_COPY` having
+        // already transferred the bytes up to it, so `got` is kept there. Any other
+        // failure leaves `got` unspecified. Field crash reports showed a count far larger
+        // than the buffer, so it is clamped too.
+        if ok == FALSE && last_error() != ERROR_PARTIAL_COPY {
+            return 0;
         }
-        got
+        got.min(buf.len())
     }
 
     fn modules(&self) -> Result<Vec<Module>> {
