@@ -3297,7 +3297,7 @@ dependencies = [
 [[package]]
 name = "source2"
 version = "0.1.0"
-source = "git+https://github.com/deadlock-plus/source2-rs?rev=847d094be4da532777d0ab7d4e526118ead0e5dc#847d094be4da532777d0ab7d4e526118ead0e5dc"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=2b73748e7bc8d901cbdbef60d8d68ddaddd3159f#2b73748e7bc8d901cbdbef60d8d68ddaddd3159f"
 dependencies = [
  "source2-kv3",
  "source2-resource",
@@ -3308,7 +3308,7 @@ dependencies = [
 [[package]]
 name = "source2-kv3"
 version = "0.1.0"
-source = "git+https://github.com/deadlock-plus/source2-rs?rev=847d094be4da532777d0ab7d4e526118ead0e5dc#847d094be4da532777d0ab7d4e526118ead0e5dc"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=2b73748e7bc8d901cbdbef60d8d68ddaddd3159f#2b73748e7bc8d901cbdbef60d8d68ddaddd3159f"
 dependencies = [
  "lz4_flex",
  "ruzstd",
@@ -3318,12 +3318,12 @@ dependencies = [
 [[package]]
 name = "source2-resource"
 version = "0.1.0"
-source = "git+https://github.com/deadlock-plus/source2-rs?rev=847d094be4da532777d0ab7d4e526118ead0e5dc#847d094be4da532777d0ab7d4e526118ead0e5dc"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=2b73748e7bc8d901cbdbef60d8d68ddaddd3159f#2b73748e7bc8d901cbdbef60d8d68ddaddd3159f"
 
 [[package]]
 name = "source2-texture"
 version = "0.1.0"
-source = "git+https://github.com/deadlock-plus/source2-rs?rev=847d094be4da532777d0ab7d4e526118ead0e5dc#847d094be4da532777d0ab7d4e526118ead0e5dc"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=2b73748e7bc8d901cbdbef60d8d68ddaddd3159f#2b73748e7bc8d901cbdbef60d8d68ddaddd3159f"
 dependencies = [
  "png 0.18.1",
 ]
@@ -3331,7 +3331,7 @@ dependencies = [
 [[package]]
 name = "source2-vpk"
 version = "0.1.0"
-source = "git+https://github.com/deadlock-plus/source2-rs?rev=847d094be4da532777d0ab7d4e526118ead0e5dc#847d094be4da532777d0ab7d4e526118ead0e5dc"
+source = "git+https://github.com/deadlock-plus/source2-rs?rev=2b73748e7bc8d901cbdbef60d8d68ddaddd3159f#2b73748e7bc8d901cbdbef60d8d68ddaddd3159f"
 
 [[package]]
 name = "stable_deref_trait"
