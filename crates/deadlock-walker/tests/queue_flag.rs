@@ -330,3 +330,17 @@ fn an_unreadable_flag_is_unknown() {
 
 #[allow(dead_code)]
 const _SECTIONS: [usize; 2] = [TEXT, RDATA];
+
+#[test]
+fn a_flag_built_from_a_copied_image_reads_nothing_more() {
+    let mut m = mem(FULL);
+    let client = deadlock_memory::mem::MemoryReader::module(&m, "client.dll").unwrap();
+    let image = deadlock_walker::PeImage::read(&m, &client).unwrap();
+    m.reset_reads();
+    let mut flag = QueueFlag::from_image(&m, &image).unwrap();
+    assert_eq!(m.reads(), 0);
+    assert_eq!(flag.address(), BASE + FLAG as u64);
+    assert_eq!(flag.request_address(), Some(BASE + SINGLETON as u64));
+    set_flag(&mut m, 1);
+    assert_eq!(flag.queueing(&m).unwrap(), Some(true));
+}

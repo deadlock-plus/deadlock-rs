@@ -57,7 +57,18 @@ impl QueueFlag {
     pub fn new(mem: &dyn MemoryReader) -> Result<Self> {
         let client = mem.module(CLIENT_MODULE)?;
         let image = PeImage::read(mem, &client)?;
-        let (address, request) = find_flag(&image)?;
+        Self::from_image(mem, &image)
+    }
+
+    /// Find the flag in `image`, a copy of the client in `mem`, without reading `mem`.
+    ///
+    /// Lets one copy of the client serve several lookups.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::AnchorNotFound`] if this build does not match the anchor.
+    pub fn from_image(mem: &dyn MemoryReader, image: &PeImage) -> Result<Self> {
+        let (address, request) = find_flag(image)?;
         Ok(QueueFlag {
             pid: mem.pid(),
             address,
@@ -125,6 +136,25 @@ impl QueueFlag {
 }
 
 fn find_flag(image: &PeImage) -> Result<(u64, Option<u64>)> {
+    let (loader, begin, end) = find_popup(image)?;
+    let flag = find_compare(image, begin, end)
+        .ok_or(Error::AnchorNotFound("flag check in the popup function"))?;
+    let request = find_request(image, loader, end).map(|(rva, _)| image.base() + u64::from(rva));
+    Ok((image.base() + u64::from(flag), request))
+}
+
+/// RVA of the function the popup hands the play controller to: the one that stops a search.
+pub(crate) fn find_stop(image: &PeImage) -> Result<u32> {
+    let (loader, _, end) = find_popup(image)?;
+    find_request(image, loader, end)
+        .and_then(|(_, stop)| stop)
+        .ok_or(Error::AnchorNotFound(
+            "play controller handed to the stop function",
+        ))
+}
+
+/// The header string load and the `[begin, end)` of the popup function around it.
+fn find_popup(image: &PeImage) -> Result<(u32, u32, u32)> {
     let string = find_string(image).ok_or(Error::AnchorNotFound("popup header string"))?;
     let loader =
         find_loader(image, string).ok_or(Error::AnchorNotFound("code loading the popup header"))?;
@@ -133,10 +163,7 @@ fn find_flag(image: &PeImage) -> Result<(u64, Option<u64>)> {
         .ok_or(Error::AnchorNotFound(
             "function around the popup header load",
         ))?;
-    let flag = find_compare(image, begin, end)
-        .ok_or(Error::AnchorNotFound("flag check in the popup function"))?;
-    let request = find_request(image, loader, end).map(|rva| image.base() + u64::from(rva));
-    Ok((image.base() + u64::from(flag), request))
+    Ok((loader, begin, end))
 }
 
 fn find_string(image: &PeImage) -> Option<u32> {
@@ -178,10 +205,11 @@ fn find_compare(image: &PeImage, begin: u32, end: u32) -> Option<u32> {
 }
 
 /// RVA of the data the first `lea rcx, [rip+disp32]` directly followed by a `call` in
-/// `[from, end)` points at. The static-init guard of the same object is loaded the same way
-/// in the cold block after the function's first `ret`, so it comes later; it is also skipped
-/// by name, because the function compares it against a constant (`cmp dword [guard], imm8`).
-fn find_request(image: &PeImage, from: u32, end: u32) -> Option<u32> {
+/// `[from, end)` points at, and of that call's target if it lands inside the image. The
+/// static-init guard of the same object is loaded the same way in the cold block after the
+/// function's first `ret`, so it comes later; it is also skipped by name, because the
+/// function compares it against a constant (`cmp dword [guard], imm8`).
+fn find_request(image: &PeImage, from: u32, end: u32) -> Option<(u32, Option<u32>)> {
     let window = image.bytes().get(from as usize..end as usize)?;
     memmem::find_iter(window, &[0x48, 0x8d, 0x0d]).find_map(|at| {
         if *window.get(at + RIP_RELATIVE_LEN)? != 0xe8 {
@@ -196,12 +224,27 @@ fn find_request(image: &PeImage, from: u32, end: u32) -> Option<u32> {
                 .and_then(|d| rip_target(from as usize + c, d))
                 == Some(target)
         });
-        (in_data && !is_guard).then_some(target)
+        if !in_data || is_guard {
+            return None;
+        }
+        let call = from as usize + at + RIP_RELATIVE_LEN;
+        let stop =
+            call_target(image.bytes(), call).filter(|&rva| (rva as usize) < image.bytes().len());
+        Some((target, stop))
     })
 }
 
+/// RVA a `call rel32` at `at` lands on.
+pub(crate) fn call_target(bytes: &[u8], at: usize) -> Option<u32> {
+    if *bytes.get(at)? != 0xe8 {
+        return None;
+    }
+    let disp = i32::from_le_bytes(bytes.get(at + 1..at + 5)?.try_into().ok()?);
+    u32::try_from(i64::try_from(at + 5).ok()? + i64::from(disp)).ok()
+}
+
 /// RVA a 7-byte RIP-relative instruction at `at` refers to, given its 32-bit displacement.
-fn rip_target(at: usize, disp: &[u8]) -> Option<u32> {
+pub(crate) fn rip_target(at: usize, disp: &[u8]) -> Option<u32> {
     let disp = i32::from_le_bytes(disp.try_into().ok()?);
     u32::try_from(i64::try_from(at + RIP_RELATIVE_LEN).ok()? + i64::from(disp)).ok()
 }
