@@ -4,7 +4,7 @@
 //! `cargo run --release -p deadlock-walker --example party_queue`
 //!
 //! Given the path of a `client.dll` on disk, only locate the slot in that file and print
-//! its RVA and the start time offset; no game needed.
+//! its RVA and the field offsets; no game needed.
 
 use deadlock_walker::{PartyQueue, PeImage};
 
@@ -17,10 +17,24 @@ fn main() {
 
 fn offline(path: &std::path::Path) {
     let file = std::fs::read(path).expect("read client.dll");
-    let image = PeImage::from_bytes(0, map(&file)).expect("pe");
+    // Vtables hold absolute addresses, so RTTI resolves only at the preferred base.
+    let nt = u32::from_le_bytes(file[0x3c..0x40].try_into().unwrap()) as usize;
+    let base = u64::from_le_bytes(file[nt + 48..nt + 56].try_into().unwrap());
+    let image = PeImage::from_bytes(base, map(&file)).expect("pe");
     let location = PartyQueue::locate(&image).expect("locate");
-    println!("party slot RVA {:#x}", location.slot);
+    println!("party slot RVA {:#x}", location.slot - base);
     println!("start time offset {:#x}", location.start_offset);
+    print_modes(location);
+}
+
+fn print_modes(location: deadlock_walker::PartyLocation) {
+    match location.modes {
+        Some(m) => println!(
+            "match mode offset {:#x}, game mode offset {:#x}, bot difficulty offset {:#x}",
+            m.match_mode, m.game_mode, m.bot_difficulty
+        ),
+        None => println!("mode offsets not found"),
+    }
 }
 
 /// Lay a PE file out as the loader would, so RVAs index it.
@@ -61,6 +75,7 @@ mod live {
             "party slot {:#x}, start time offset {:#x}",
             location.slot, location.start_offset
         );
+        super::print_modes(location);
         let mut last = None;
         loop {
             let state = (
