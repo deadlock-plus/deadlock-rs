@@ -15,6 +15,28 @@ Match metadata (`CMsgMatchMetaDataContents`) is anchored on the match, not the a
 retry. The client keeps only the matches the player has opened, so a match that is not
 resident is `None`. See `examples/metadata.rs`.
 
+Match salts come from `GcSession::match_salts(mem)`, which returns `ResidentSalts`: the
+resident `CMsgClientToGCGetMatchMetaDataResponse` replies (`Kind::MatchSalts`; success, a
+metadata salt and `replay_valid_through` set), `CMsgClientToGCGetMatchHistoryResponse.Match`
+rows (`Kind::HistoryMatch`; match id and start time set) and complete match metadata to
+pair them with, each copy once. Those kinds are in `Kind::SALTS`, not `Kind::ALL`, so the
+party and post-game reads never walk history rows. A call re-reads its pins and searches
+the regions Game Coordinator objects were seen in; the whole heap only while none is known.
+
+| Kind | Message |
+|---|---|
+| Party | `CSOCitadelParty` |
+| Lobby | `CSOCitadelLobby` |
+| Hideout | `CSOCitadelHideoutLobby` |
+| GameAccount | `CSOGameAccountClient` |
+| AccountStats | `CMsgAccountStats` |
+| AccountHeroes | `CSOAccountHeroInfo` |
+| HeroBuilds | `CMsgHeroBuild` |
+| PostGameProgress | `CMsgPostGameProgressData` |
+| MatchMetaData | `CMsgMatchMetaDataContents` |
+| MatchSalts | `CMsgClientToGCGetMatchMetaDataResponse` |
+| HistoryMatch | `CMsgClientToGCGetMatchHistoryResponse.Match` |
+
 ## Platforms
 
 The walker only parses bytes and talks to a `deadlock_memory::MemoryReader`, so it builds on

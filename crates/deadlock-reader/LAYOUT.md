@@ -708,6 +708,8 @@ that passes is returned.
 | HeroBuilds | `CMsgHeroBuild` |
 | PostGameProgress | `CMsgPostGameProgressData` |
 | MatchMetaData | `CMsgMatchMetaDataContents` |
+| MatchSalts | `CMsgClientToGCGetMatchMetaDataResponse` |
+| HistoryMatch | `CMsgClientToGCGetMatchHistoryResponse.Match` |
 
 Match metadata is the exception to the account rule. The client holds one object per match
 the player has opened, and none of them names an account. A copy counts when it is

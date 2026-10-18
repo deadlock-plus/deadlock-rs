@@ -6,17 +6,18 @@ mod support;
 use std::time::Duration;
 
 use deadlock_walker::ext::PartyExt;
-use deadlock_walker::{Error, GcSession, Kind};
+use deadlock_walker::{Error, GcSession, Kind, ResidentSalts};
 use prost::Message;
 use support::*;
+use valveprotos::deadlock::c_msg_client_to_gc_get_match_history_response::Match as HistoryRow;
 use valveprotos::deadlock::c_msg_match_meta_data_contents::{MatchInfo, Players};
 use valveprotos::deadlock::c_msg_post_game_progress_data::PlayerData;
 use valveprotos::deadlock::cso_citadel_hideout_lobby::Member as HideoutMember;
 use valveprotos::deadlock::cso_citadel_party::{Invite, LeftMember, Member};
 use valveprotos::deadlock::{
-    CMsgAccountHeroStats, CMsgAccountStats, CMsgHeroBuild, CMsgMatchMetaDataContents,
-    CMsgPostGameProgressData, CsoAccountHeroInfo, CsoCitadelHideoutLobby, CsoCitadelLobby,
-    CsoCitadelParty, CsoGameAccountClient,
+    CMsgAccountHeroStats, CMsgAccountStats, CMsgClientToGcGetMatchMetaDataResponse, CMsgHeroBuild,
+    CMsgMatchMetaDataContents, CMsgPostGameProgressData, CsoAccountHeroInfo,
+    CsoCitadelHideoutLobby, CsoCitadelLobby, CsoCitadelParty, CsoGameAccountClient,
 };
 
 const ME: u32 = 387_246_372;
@@ -31,6 +32,8 @@ const HIDEOUT: &str = "CSOCitadelHideoutLobby";
 const BUILD: &str = "CMsgHeroBuild";
 const POST_GAME: &str = "CMsgPostGameProgressData";
 const META: &str = "CMsgMatchMetaDataContents";
+const REPLY: &str = "CMsgClientToGCGetMatchMetaDataResponse";
+const ROW: &str = "CMsgClientToGCGetMatchHistoryResponse.Match";
 
 fn world_of(roots: &[&str]) -> World {
     let mut w = World::with_roots(roots);
@@ -40,7 +43,7 @@ fn world_of(roots: &[&str]) -> World {
 
 fn world() -> World {
     world_of(&[
-        PARTY, LOBBY, ACCOUNT, STATS, HEROES, HIDEOUT, BUILD, POST_GAME, META,
+        PARTY, LOBBY, ACCOUNT, STATS, HEROES, HIDEOUT, BUILD, POST_GAME, META, REPLY, ROW,
     ])
 }
 
@@ -733,4 +736,166 @@ fn one_sweep_serves_every_kind_that_has_no_pin() {
     assert!(s.game_account(&w.mem).unwrap().is_some());
     assert_eq!(s.account_heroes(&w.mem).unwrap().len(), 1);
     assert_eq!(s.stats().0, 1);
+}
+
+const START: u32 = 1_792_000_000;
+const DAY: u32 = 86_400;
+
+/// The reply live match 119698824 left resident on the post-game screen.
+fn reply(metadata_salt: u32) -> CMsgClientToGcGetMatchMetaDataResponse {
+    CMsgClientToGcGetMatchMetaDataResponse {
+        result: Some(1),
+        replay_salt: Some(1_703_251_564),
+        metadata_salt: Some(metadata_salt),
+        replay_valid_through: Some(START + 21 * DAY),
+        replay_group_id: Some(429),
+        replay_processing_through: Some(START + 1_800 + 1_200),
+    }
+}
+
+fn row(match_id: u64, start: u32) -> HistoryRow {
+    HistoryRow {
+        match_id: Some(match_id),
+        hero_id: Some(15),
+        match_duration_s: Some(1_800),
+        start_time: Some(start),
+        player_kills: Some(7),
+        ..Default::default()
+    }
+}
+
+fn salts(s: &mut GcSession, w: &World) -> ResidentSalts {
+    s.match_salts(&w.mem).unwrap()
+}
+
+#[test]
+fn a_salt_reply_is_found_decoded_and_deduplicated() {
+    let mut w = world();
+    let mine = reply(188_785_897);
+    w.build(REPLY, &mine.encode_to_vec());
+    w.build(REPLY, &mine.encode_to_vec());
+    let failed = CMsgClientToGcGetMatchMetaDataResponse {
+        result: Some(6),
+        ..reply(1)
+    };
+    w.build(REPLY, &failed.encode_to_vec());
+    w.build(REPLY, &reply(0).encode_to_vec());
+    let expired = CMsgClientToGcGetMatchMetaDataResponse {
+        replay_valid_through: Some(0),
+        ..reply(2)
+    };
+    w.build(REPLY, &expired.encode_to_vec());
+
+    let mut s = session(&w);
+    let found = salts(&mut s, &w);
+    assert_eq!(found.replies, [mine]);
+    assert_eq!(s.pins(Kind::MatchSalts).len(), 2, "both copies stay pinned");
+    assert_eq!(s.stats().0, 1, "nothing known yet, so one heap sweep");
+}
+
+#[test]
+fn history_rows_and_match_metadata_are_found() {
+    let mut w = world();
+    w.build(ROW, &row(119_698_824, START).encode_to_vec());
+    w.build(ROW, &row(119_698_824, START).encode_to_vec());
+    w.build(ROW, &row(0, START).encode_to_vec());
+    w.build(ROW, &row(5, 0).encode_to_vec());
+    w.build(ROW, &row(119_000_000, START - DAY).encode_to_vec());
+    w.build(META, &meta(119_698_824, 2).encode_to_vec());
+    w.build(META, &meta(0, 2).encode_to_vec());
+
+    let found = salts(&mut session(&w), &w);
+    assert_eq!(
+        found.rows,
+        [row(119_698_824, START), row(119_000_000, START - DAY)]
+    );
+    assert_eq!(found.metadata, [meta(119_698_824, 2)]);
+    assert!(found.replies.is_empty());
+}
+
+#[test]
+fn a_freed_reply_revived_as_another_class_is_dropped() {
+    let mut w = world();
+    let obj = w.build(REPLY, &reply(188_785_897).encode_to_vec());
+    let mut s = session(&w);
+    assert_eq!(salts(&mut s, &w).replies.len(), 1);
+
+    let other = w.add_plain_class("CSomethingElse");
+    w.patch(obj, &other.to_le_bytes());
+    assert!(salts(&mut s, &w).replies.is_empty());
+    assert!(s.pins(Kind::MatchSalts).is_empty());
+
+    revive(&mut w, REPLY, obj);
+    assert_eq!(salts(&mut s, &w).replies, [reply(188_785_897)]);
+}
+
+#[test]
+fn a_new_reply_beside_known_objects_is_found_without_a_sweep() {
+    let mut w = world();
+    w.build(ACCOUNT, &account_wire(ME));
+    let mut s = session(&w);
+    assert!(s.game_account(&w.mem).unwrap().is_some());
+    assert_eq!(s.stats().0, 1);
+
+    assert_eq!(salts(&mut s, &w), ResidentSalts::default());
+    w.build(REPLY, &reply(188_785_897).encode_to_vec());
+    w.build(ROW, &row(119_698_824, START).encode_to_vec());
+    let found = salts(&mut s, &w);
+    assert_eq!(found.replies, [reply(188_785_897)]);
+    assert_eq!(found.rows, [row(119_698_824, START)]);
+    assert_eq!(
+        s.stats().0,
+        1,
+        "searched the account's region, not the heap"
+    );
+
+    w.build(REPLY, &reply(42).encode_to_vec());
+    assert_eq!(salts(&mut s, &w).replies.len(), 2);
+    assert_eq!(s.stats().0, 1);
+}
+
+#[test]
+fn with_nothing_known_the_heap_is_swept_once_per_interval() {
+    let w = world();
+    let mut s = session(&w);
+    salts(&mut s, &w);
+    salts(&mut s, &w);
+    assert_eq!(s.stats().0, 1);
+}
+
+#[test]
+fn party_and_post_game_reads_never_sweep_the_salt_kinds() {
+    let mut w = world();
+    w.build(REPLY, &reply(188_785_897).encode_to_vec());
+    w.build(ROW, &row(119_698_824, START).encode_to_vec());
+    let mut s = session(&w);
+    assert_eq!(s.party(&w.mem).unwrap(), None);
+    assert_eq!(s.post_game_progress(&w.mem).unwrap(), None);
+    s.sweep(&w.mem).unwrap();
+    for kind in Kind::SALTS {
+        assert!(s.pins(kind).is_empty(), "{kind:?} pinned by a sweep");
+        assert!(s.hints(kind).is_empty(), "{kind:?} hinted by a sweep");
+        assert!(!Kind::ALL.contains(&kind));
+    }
+}
+
+#[test]
+fn salt_reads_refuse_a_different_process() {
+    let mut w = world();
+    w.build(REPLY, &reply(188_785_897).encode_to_vec());
+    let mut s = session(&w);
+    assert_eq!(salts(&mut s, &w).replies.len(), 1);
+
+    let restarted = deadlock_memory::mock::MockMemory::new(9);
+    assert!(matches!(
+        s.match_salts(&restarted).unwrap_err(),
+        Error::WrongProcess
+    ));
+    assert_eq!(salts(&mut s, &w).replies.len(), 1);
+}
+
+#[test]
+fn the_salt_kinds_name_their_messages() {
+    assert_eq!(Kind::MatchSalts.message(), REPLY);
+    assert_eq!(Kind::HistoryMatch.message(), ROW);
 }

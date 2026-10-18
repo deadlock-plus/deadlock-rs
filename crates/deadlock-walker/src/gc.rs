@@ -43,15 +43,26 @@
 //! non-zero match id and at least one player. Every complete copy is pinned, and
 //! [`GcSession::match_metadata`] picks among them by match id on each call. A pinned copy
 //! that was freed or reused fails the vtable check or the completeness check and is dropped.
+//!
+//! # Match salts
+//!
+//! [`GcSession::match_salts`] reads the `GetMatchMetaData` replies, history rows and match
+//! metadata the client holds, none tied to an account. A reply counts when it succeeded and
+//! carries a metadata salt and a validity stamp, a row when it has a match id and a start
+//! time. Freed replies are reused for new ones, so the vtable check matters most here, and
+//! copies are collapsed by content. These kinds are never part of the polled reads' sweeps:
+//! a client holds hundreds of rows.
 
 use std::time::{Duration, Instant};
 
 use deadlock_memory::mem::{MemoryReader, Region};
 use prost::Message;
+use valveprotos::deadlock::c_msg_client_to_gc_get_match_history_response::Match as HistoryMatch;
+use valveprotos::deadlock::c_msg_client_to_gc_get_match_meta_data_response::EResult;
 use valveprotos::deadlock::{
-    CMsgAccountStats, CMsgHeroBuild, CMsgMatchMetaDataContents, CMsgPostGameProgressData,
-    CsoAccountHeroInfo, CsoCitadelHideoutLobby, CsoCitadelLobby, CsoCitadelParty,
-    CsoGameAccountClient,
+    CMsgAccountStats, CMsgClientToGcGetMatchMetaDataResponse, CMsgHeroBuild,
+    CMsgMatchMetaDataContents, CMsgPostGameProgressData, CsoAccountHeroInfo,
+    CsoCitadelHideoutLobby, CsoCitadelLobby, CsoCitadelParty, CsoGameAccountClient,
 };
 
 use crate::error::{Error, Result};
@@ -91,6 +102,12 @@ pub const DEFAULT_NEIGHBOUR_INTERVAL: Duration = Duration::from_secs(1);
 /// How many past locations are remembered per kind.
 pub const MAX_HINTS: usize = 8;
 
+/// How many heap regions [`GcSession::match_salts`] searches at most.
+///
+/// A live client keeps its Game Coordinator objects in about 200 regions; searching them
+/// costs about 100 ms where the whole heap costs about 2 s.
+pub const MAX_SALT_REGIONS: usize = 512;
+
 const CLIENT_MODULE: &str = "client.dll";
 
 /// More than any one object needs: a hero build holds a few hundred mods.
@@ -121,10 +138,20 @@ pub enum Kind {
     PostGameProgress = 7,
     /// `CMsgMatchMetaDataContents`.
     MatchMetaData = 8,
+    /// `CMsgClientToGCGetMatchMetaDataResponse`, the reply carrying a match's salts.
+    MatchSalts = 9,
+    /// `CMsgClientToGCGetMatchHistoryResponse.Match`, one row of a match history.
+    HistoryMatch = 10,
 }
 
+const KINDS: usize = Kind::ALL.len() + Kind::SALTS.len();
+
 impl Kind {
-    /// Every kind.
+    /// Every kind the polled reads and [`GcSession::sweep`] look for.
+    ///
+    /// The [`SALTS`](Self::SALTS) kinds are left out: a client holds hundreds of history
+    /// rows, and walking them on every party or post-game sweep would cost more than the
+    /// read it rides on.
     pub const ALL: [Kind; 9] = [
         Kind::Party,
         Kind::Lobby,
@@ -136,6 +163,9 @@ impl Kind {
         Kind::PostGameProgress,
         Kind::MatchMetaData,
     ];
+
+    /// The kinds only [`GcSession::match_salts`] reads.
+    pub const SALTS: [Kind; 2] = [Kind::MatchSalts, Kind::HistoryMatch];
 
     /// The protobuf message this kind is.
     pub fn message(self) -> &'static str {
@@ -149,8 +179,24 @@ impl Kind {
             Kind::HeroBuilds => "CMsgHeroBuild",
             Kind::PostGameProgress => "CMsgPostGameProgressData",
             Kind::MatchMetaData => "CMsgMatchMetaDataContents",
+            Kind::MatchSalts => "CMsgClientToGCGetMatchMetaDataResponse",
+            Kind::HistoryMatch => "CMsgClientToGCGetMatchHistoryResponse.Match",
         }
     }
+}
+
+/// The match salts and the match facts they pair with, as resident in the client.
+///
+/// Each list holds every distinct object once, in address order: the client keeps copies,
+/// and a copy adds nothing.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ResidentSalts {
+    /// Successful `GetMatchMetaData` replies with a metadata salt and a validity stamp.
+    pub replies: Vec<CMsgClientToGcGetMatchMetaDataResponse>,
+    /// Match history rows with a match id and a start time.
+    pub rows: Vec<HistoryMatch>,
+    /// Complete match metadata, as [`GcSession::match_metadata_all`] counts it.
+    pub metadata: Vec<CMsgMatchMetaDataContents>,
 }
 
 /// What a sweep found.
@@ -252,6 +298,27 @@ impl Object for CMsgMatchMetaDataContents {
     }
 }
 
+impl Object for CMsgClientToGcGetMatchMetaDataResponse {
+    const KIND: Kind = Kind::MatchSalts;
+
+    /// A reply names no account. One that carries salts is a success with a metadata salt
+    /// and the replay validity stamp the pairing dates it by.
+    fn ours(&self, _account: u32) -> bool {
+        self.result() == EResult::KEResultSuccess
+            && self.metadata_salt() > 0
+            && self.replay_valid_through() > 0
+    }
+}
+
+impl Object for HistoryMatch {
+    const KIND: Kind = Kind::HistoryMatch;
+
+    /// Rows of other players' histories count too; only an initialised row is taken.
+    fn ours(&self, _account: u32) -> bool {
+        self.match_id() > 0 && self.start_time() > 0
+    }
+}
+
 /// The id of a complete match metadata object.
 ///
 /// Complete means the id is set and non-zero and at least one player has been written. The
@@ -305,7 +372,7 @@ pub struct GcSession {
     schema: Schema,
     tables: ClientTables,
     search: SearchConfig,
-    kinds: [KindState; Kind::ALL.len()],
+    kinds: [KindState; KINDS],
     /// Addresses in the order they were first seen holding an object, newest last.
     ///
     /// Two generations of one party are often impossible to order from their contents. A
@@ -318,6 +385,8 @@ pub struct GcSession {
     neighbour_interval: Duration,
     sweeps: u64,
     reuses: u64,
+    /// Regions a Game Coordinator object has been seen in, oldest first.
+    salt_regions: Vec<Region>,
 }
 
 impl GcSession {
@@ -342,8 +411,8 @@ impl GcSession {
         let schema = client_schema(&image)?;
         let tables = ClientTables::read(&image, &schema)?;
         let resolver = VtableResolver::new(&image);
-        let mut kinds: [KindState; Kind::ALL.len()] = Default::default();
-        for kind in Kind::ALL {
+        let mut kinds: [KindState; KINDS] = Default::default();
+        for kind in Kind::ALL.into_iter().chain(Kind::SALTS) {
             kinds[kind as usize].vtable = resolver.vtable(kind.message()).ok();
         }
         Ok(GcSession {
@@ -360,6 +429,7 @@ impl GcSession {
             neighbour_interval: DEFAULT_NEIGHBOUR_INTERVAL,
             sweeps: 0,
             reuses: 0,
+            salt_regions: Vec::new(),
         })
     }
 
@@ -415,6 +485,7 @@ impl GcSession {
             };
         }
         self.first_seen.clear();
+        self.salt_regions.clear();
     }
 
     /// Search the whole heap once for every kind and pin what belongs to the local account.
@@ -574,6 +645,126 @@ impl GcSession {
         mem: &dyn MemoryReader,
     ) -> Result<Vec<CMsgMatchMetaDataContents>> {
         self.read_list(mem)
+    }
+
+    /// Every match salt reply, history row and complete match metadata resident.
+    ///
+    /// Not anchored on the local account: rows and metadata of other players' matches are
+    /// what a reply of theirs pairs with. Each call re-reads what it pinned, then searches
+    /// every region a Game Coordinator object has been seen in (up to
+    /// [`MAX_SALT_REGIONS`]), since a reply arrives whenever the player opens a match. The
+    /// whole heap is searched only while no such region is known, at most once per
+    /// [`every`](Self::every) interval.
+    ///
+    /// # Errors
+    ///
+    /// One of the three classes is unknown to the client, or the target's regions cannot be
+    /// listed.
+    pub fn match_salts(&mut self, mem: &dyn MemoryReader) -> Result<ResidentSalts> {
+        self.check_process(mem)?;
+        let vtables = [
+            self.vtable(Kind::MatchSalts)?,
+            self.vtable(Kind::HistoryMatch)?,
+            self.vtable(Kind::MatchMetaData)?,
+        ];
+        let mut replies =
+            self.revalidate::<CMsgClientToGcGetMatchMetaDataResponse>(mem, vtables[0]);
+        let mut rows = self.revalidate::<HistoryMatch>(mem, vtables[1]);
+        let mut metadata = self.revalidate::<CMsgMatchMetaDataContents>(mem, vtables[2]);
+
+        self.refresh_salt_regions(mem);
+        self.learn_salt_regions(mem);
+        let hits = if !self.salt_regions.is_empty() {
+            find_in(mem, &self.salt_regions, &vtables, &self.search)
+        } else if self.may_sweep(Kind::MatchSalts) {
+            let sweep = find_many(mem, &vtables, &self.search)?;
+            let now = Instant::now();
+            for kind in [Kind::MatchSalts, Kind::HistoryMatch, Kind::MatchMetaData] {
+                self.state_mut(kind).swept_at = Some(now);
+            }
+            self.sweeps += 1;
+            sweep.hits
+        } else {
+            Vec::new()
+        };
+        if let [r, h, m] = &hits[..] {
+            self.adopt(mem, vtables[0], r, &mut replies);
+            self.adopt(mem, vtables[1], h, &mut rows);
+            self.adopt(mem, vtables[2], m, &mut metadata);
+            self.learn_salt_regions(mem);
+        }
+        Ok(ResidentSalts {
+            replies: distinct(replies),
+            rows: distinct(rows),
+            metadata: distinct(metadata),
+        })
+    }
+
+    /// Re-read every pin of `M`'s kind, keeping only the ones that still validate.
+    ///
+    /// Unlike the polled reads this leaves hints and sighting order alone: a few hundred
+    /// history rows would push every other kind's history out.
+    fn revalidate<M: Object>(&mut self, mem: &dyn MemoryReader, vtable: u64) -> Vec<(u64, M)> {
+        let pins = std::mem::take(&mut self.state_mut(M::KIND).pins);
+        let found: Vec<(u64, M)> = pins
+            .into_iter()
+            .filter_map(|addr| Some((addr, self.read_at::<M>(mem, vtable, addr)?)))
+            .collect();
+        self.state_mut(M::KIND).pins = found.iter().map(|(addr, _)| *addr).collect();
+        found
+    }
+
+    /// Pin and add every hit that is not pinned yet and validates.
+    fn adopt<M: Object>(
+        &mut self,
+        mem: &dyn MemoryReader,
+        vtable: u64,
+        hits: &[u64],
+        found: &mut Vec<(u64, M)>,
+    ) {
+        for &addr in hits {
+            if self.state(M::KIND).pins.contains(&addr) {
+                continue;
+            }
+            if let Some(m) = self.read_at::<M>(mem, vtable, addr) {
+                self.state_mut(M::KIND).pins.push(addr);
+                found.push((addr, m));
+            }
+        }
+    }
+
+    /// Bring every remembered salt region up to date, dropping the ones that are gone.
+    fn refresh_salt_regions(&mut self, mem: &dyn MemoryReader) {
+        self.salt_regions
+            .retain_mut(|r| match mem.region_at(r.base) {
+                Some(now) if now.base == r.base => {
+                    *r = now;
+                    true
+                }
+                _ => false,
+            });
+    }
+
+    /// Remember the region of every address any kind is pinned or hinted at.
+    fn learn_salt_regions(&mut self, mem: &dyn MemoryReader) {
+        let addrs: Vec<u64> = self
+            .kinds
+            .iter()
+            .flat_map(|k| k.pins.iter().chain(&k.hot))
+            .copied()
+            .collect();
+        for addr in addrs {
+            let known = |r: &Region| addr >= r.base && addr - r.base < r.size as u64;
+            if self.salt_regions.iter().any(known) {
+                continue;
+            }
+            if let Some(r) = mem.region_at(addr) {
+                if self.salt_regions.len() == MAX_SALT_REGIONS {
+                    self.salt_regions.remove(0);
+                }
+                self.salt_regions.push(r);
+            }
+        }
     }
 
     fn read_one<M: Object>(&mut self, mem: &dyn MemoryReader) -> Result<Option<M>> {
@@ -878,6 +1069,10 @@ impl GcSession {
             Kind::MatchMetaData => self
                 .read_at::<CMsgMatchMetaDataContents>(mem, vtable, addr)
                 .is_some(),
+            Kind::MatchSalts => self
+                .read_at::<CMsgClientToGcGetMatchMetaDataResponse>(mem, vtable, addr)
+                .is_some(),
+            Kind::HistoryMatch => self.read_at::<HistoryMatch>(mem, vtable, addr).is_some(),
         }
     }
 
@@ -938,6 +1133,17 @@ impl GcSession {
                 .refound_at
                 .is_none_or(|t| t.elapsed() >= self.refind_interval)
     }
+}
+
+/// The messages in address order, each distinct one once.
+fn distinct<M: Message>(mut found: Vec<(u64, M)>) -> Vec<M> {
+    found.sort_by_key(|(addr, _)| *addr);
+    let mut seen = std::collections::HashSet::new();
+    found
+        .into_iter()
+        .filter(|(_, m)| seen.insert(m.encode_to_vec()))
+        .map(|(_, m)| m)
+        .collect()
 }
 
 /// Order parties most recent first, given how recently each was first seen.

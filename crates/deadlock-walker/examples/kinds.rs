@@ -20,7 +20,7 @@ mod live {
         let resolver = VtableResolver::new(&image);
         let cfg = SearchConfig::default().excluding_module(&client);
         let walker = Walker::new(&*mem, &schema, &tables);
-        for kind in Kind::ALL {
+        for kind in Kind::ALL.into_iter().chain(Kind::SALTS) {
             let name = kind.message();
             let Some(&vt) = resolver.vtables(name).first() else {
                 println!("{name}: no vtable");

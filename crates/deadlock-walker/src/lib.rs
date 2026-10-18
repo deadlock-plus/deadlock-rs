@@ -30,7 +30,7 @@ pub mod tables;
 pub mod walk;
 
 pub use error::{Error, Result};
-pub use gc::{GcSession, Kind, SweepReport};
+pub use gc::{GcSession, Kind, ResidentSalts, SweepReport};
 pub use layout::{FieldLayout, LayoutSource, MessageLayout};
 pub use party_queue::{PartyLocation, PartyModeOffsets, PartyQueue, PartyQueueState};
 pub use pe::PeImage;
