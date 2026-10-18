@@ -1,3 +1,5 @@
+use std::net::{Ipv4Addr, SocketAddrV4};
+
 use deadlock_memory::mem::MemoryReader;
 use deadlock_memory::sig::{Pattern, SigDesc, scan_and_resolve};
 
@@ -47,6 +49,28 @@ const FLOW_GETTER_COUNT: usize = 3;
 
 /// Offsets from here up are not a field of a `CNetChan`.
 const MAX_FIELD_OFFSET: u32 = 0x1_0000;
+
+/// `CNetChan::IsLoopback`: `sub rsp,28h; add rcx,REMOTE; cmp dword [rcx+1Ch],0; jnz ..;
+/// call [netadr_t::IsLocalhost]`. The imm32 at +7 is the remote `ns_address`.
+const REMOTE_GETTER: &str = "48 83 EC 28 48 81 C1 ?? ?? ?? ?? 83 79 1C 00 75 ?? FF 15";
+
+/// In `CNetworkGameClient::SetSignonState`: `cmp edi,[rsi+SIGNON]; jg ..;
+/// mov rcx,[rsi+0F0h]`. The disp32 at +2 is the signon state, on the object whose
+/// `+0xF0` is the channel [`ENGINE_GLOBAL`] leads to.
+const SIGNON_FIELD: &str = "3B BE ?? ?? ?? ?? 7F ?? 48 8B 8E F0 00 00 00";
+
+/// `ns_address`: a `netadr_t` at `+0x0`, a packed `CSteamID` at `+0xc`, the address kind
+/// at `+0x1c`. `netadr_t` is `{ u32 type; u8 ip[4]; u16 port_be; }`.
+const NS_ADDRESS_LEN: usize = 0x20;
+const NS_STEAM_ID: usize = 0xc;
+const NS_KIND: usize = 0x1c;
+const NETADR_TYPE_LOOPBACK: u32 = 1;
+
+/// `SetSignonState` rejects anything above `SIGNONSTATE_CHANGELEVEL`.
+const MAX_SIGNON: u32 = 7;
+
+/// `SIGNONSTATE_FULL` in the engine's `SignonState_t`: the client is fully in the game.
+pub const SIGNON_FULL: u32 = 6;
 
 const MAX_PING_MS: i32 = 10_000;
 const MAX_JITTER_MS: f32 = 10_000.0;
@@ -126,11 +150,53 @@ pub struct NetChanOffsets {
     pub jitter_out: u32,
 }
 
+/// Offsets for [`NetChanAnchors::read_connection`]. `None` where a signature missed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConnectionOffsets {
+    /// The remote `ns_address` inside `CNetChan`.
+    pub remote: Option<u32>,
+    /// The signon state, `u32`, inside the object the engine global points to.
+    pub signon: Option<u32>,
+}
+
+/// The server end of the net channel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[non_exhaustive]
+pub enum Remote {
+    /// A Steam networking peer: the server's 64-bit SteamID.
+    SteamId(u64),
+    /// A plain IP peer. `None` when the address is unset.
+    Ip(Option<SocketAddrV4>),
+    /// This machine.
+    Loopback,
+    /// An address kind this crate does not decode, as the engine numbers it.
+    Unknown(u32),
+}
+
+/// What the net channel says about the current connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+pub struct NetConnection {
+    /// Raw `SignonState_t`, 0..=7. `None` when its offset could not be derived.
+    pub signon: Option<u32>,
+    /// `None` when its offset could not be derived.
+    pub remote: Option<Remote>,
+}
+
+impl NetConnection {
+    /// The client has finished signing on and is in the game.
+    pub fn is_full(&self) -> bool {
+        self.signon == Some(SIGNON_FULL)
+    }
+}
+
 /// Where the net channel lives and how it is laid out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NetChanAnchors {
     global: u64,
     offsets: NetChanOffsets,
+    connection: ConnectionOffsets,
 }
 
 impl NetChanAnchors {
@@ -192,7 +258,19 @@ impl NetChanAnchors {
             jitter_in: imm32("net_flow_getters", networksystem, jitter + 4)?,
             jitter_out: imm32("net_flow_getters", networksystem, jitter + 10)?,
         };
-        Ok(Self { global, offsets })
+        let connection = ConnectionOffsets {
+            remote: find("net_remote_getter", REMOTE_GETTER, networksystem)
+                .and_then(|at| imm32("net_remote_getter", networksystem, at + 7))
+                .ok(),
+            signon: find("net_signon_field", SIGNON_FIELD, engine)
+                .and_then(|at| imm32("net_signon_field", engine, at + 2))
+                .ok(),
+        };
+        Ok(Self {
+            global,
+            offsets,
+            connection,
+        })
     }
 
     /// Address of the engine global.
@@ -205,6 +283,65 @@ impl NetChanAnchors {
         self.offsets
     }
 
+    /// Derived offsets for [`NetChanAnchors::read_connection`].
+    pub fn connection_offsets(&self) -> ConnectionOffsets {
+        self.connection
+    }
+
+    /// Read the signon state and the server end of the channel.
+    ///
+    /// `Ok(None)` when the global or the channel pointer is null: not connected.
+    ///
+    /// # Errors
+    ///
+    /// [`NetChanError::Implausible`] when the signon state is out of range, and
+    /// [`NetChanError::Memory`] when a read fails.
+    pub fn read_connection(
+        &self,
+        mem: &dyn MemoryReader,
+    ) -> Result<Option<NetConnection>, NetChanError> {
+        let Some((root, chan)) = self.channel(mem)? else {
+            return Ok(None);
+        };
+        let signon = match self.connection.signon {
+            Some(off) => {
+                let v = mem
+                    .read_u32(root.wrapping_add(u64::from(off)))
+                    .map_err(NetChanError::Memory)?;
+                if v > MAX_SIGNON {
+                    return Err(NetChanError::Implausible {
+                        field: "signon",
+                        value: f64::from(v),
+                    });
+                }
+                Some(v)
+            }
+            None => None,
+        };
+        let remote = match self.connection.remote {
+            Some(off) => {
+                let mut ns = [0u8; NS_ADDRESS_LEN];
+                mem.read_into(chan.wrapping_add(u64::from(off)), &mut ns)
+                    .map_err(NetChanError::Memory)?;
+                Some(decode_remote(&ns))
+            }
+            None => None,
+        };
+        Ok(Some(NetConnection { signon, remote }))
+    }
+
+    /// The engine global's object and its channel, or `None` when either pointer is null.
+    fn channel(&self, mem: &dyn MemoryReader) -> Result<Option<(u64, u64)>, NetChanError> {
+        let root = mem.read_u64(self.global).map_err(NetChanError::Memory)?;
+        if root == 0 {
+            return Ok(None);
+        }
+        let chan = mem
+            .read_u64(root.wrapping_add(CHAN_SLOT))
+            .map_err(NetChanError::Memory)?;
+        Ok((chan != 0).then_some((root, chan)))
+    }
+
     /// Read the current stats.
     ///
     /// # Errors
@@ -213,16 +350,7 @@ impl NetChanAnchors {
     /// [`NetChanError::Implausible`] when a field holds a value it cannot, and
     /// [`NetChanError::Memory`] when a read fails.
     pub fn read(&self, mem: &dyn MemoryReader) -> Result<NetChanStats, NetChanError> {
-        let root = mem.read_u64(self.global).map_err(NetChanError::Memory)?;
-        if root == 0 {
-            return Err(NetChanError::Unavailable);
-        }
-        let chan = mem
-            .read_u64(root.wrapping_add(CHAN_SLOT))
-            .map_err(NetChanError::Memory)?;
-        if chan == 0 {
-            return Err(NetChanError::Unavailable);
-        }
+        let (_, chan) = self.channel(mem)?.ok_or(NetChanError::Unavailable)?;
 
         let at = |off: u32| chan.wrapping_add(u64::from(off));
         let o = &self.offsets;
@@ -253,6 +381,47 @@ impl NetChanAnchors {
             jitter_out_ms: float("jitter_out", o.jitter_out, MAX_JITTER_MS)?,
         })
     }
+}
+
+fn decode_remote(ns: &[u8; NS_ADDRESS_LEN]) -> Remote {
+    let le32 = |at: usize| u32::from_le_bytes([ns[at], ns[at + 1], ns[at + 2], ns[at + 3]]);
+    match le32(NS_KIND) {
+        0 => {
+            let adr_type = le32(0);
+            let ip = Ipv4Addr::new(ns[4], ns[5], ns[6], ns[7]);
+            let port = u16::from_be_bytes([ns[8], ns[9]]);
+            // `CNetChan::IsLoopback` asks `netadr_t::IsLocalhost`, which is 127.0.0.1 only;
+            // `netadr_t::IsLoopback` is the type alone. Either means this machine.
+            if ip == Ipv4Addr::LOCALHOST || adr_type == NETADR_TYPE_LOOPBACK {
+                Remote::Loopback
+            } else if adr_type == 0 || ip.is_unspecified() || port == 0 {
+                // What `netadr_t::IsValid` rejects.
+                Remote::Ip(None)
+            } else {
+                Remote::Ip(Some(SocketAddrV4::new(ip, port)))
+            }
+        }
+        1..=3 => {
+            let lo = u64::from(le32(NS_STEAM_ID));
+            let hi = u64::from(le32(NS_STEAM_ID + 4));
+            Remote::SteamId(hi << 32 | lo)
+        }
+        kind => Remote::Unknown(kind),
+    }
+}
+
+/// Whether resolving would miss again on the same process: the images are already loaded,
+/// so a signature miss is a property of this build, not of timing.
+pub(crate) fn is_permanent(err: &NetChanError) -> bool {
+    matches!(
+        err,
+        NetChanError::Unresolved(
+            deadlock_memory::Error::SignatureNotFound(_)
+                | deadlock_memory::Error::SignatureTruncated { .. }
+                | deadlock_memory::Error::OutsideModule { .. }
+                | deadlock_memory::Error::BadPattern(_)
+        )
+    )
 }
 
 fn missed(name: &'static str) -> NetChanError {

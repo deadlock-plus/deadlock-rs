@@ -9,7 +9,7 @@ use crate::drift::{self, Drift};
 use crate::entity::{EntityLayout, EntitySnapshot, NameCache};
 use crate::error::{Error, Result};
 use crate::globals::Globals;
-use crate::netchan::{NetChanAnchors, NetChanError, NetChanStats};
+use crate::netchan::{self, NetChanAnchors, NetChanError, NetChanStats, NetConnection};
 use crate::schema::{SchemaIndex, SchemaLayout};
 use crate::snapshot::{LiveSnapshot, LiveState, Loading};
 use crate::tunables::Tunables;
@@ -86,8 +86,10 @@ pub struct Reader {
     drift: RwLock<DriftLog>,
     /// Entity count from the last walk, used to pre-size the next one.
     entity_hint: AtomicUsize,
-    /// Net channel anchors, resolved on first use and kept once they have resolved.
-    net_chan: Mutex<Option<NetChanAnchors>>,
+    /// Net channel anchors, resolved on first use. Kept once resolved, and kept as an error
+    /// once a signature has missed: a poll loop would otherwise rescan two whole images on
+    /// every call.
+    net_chan: Mutex<Option<std::result::Result<NetChanAnchors, NetChanError>>>,
 }
 
 impl std::fmt::Debug for Reader {
@@ -490,16 +492,37 @@ impl Reader {
     /// Resolves `engine2.dll` and `networksystem.dll` on first use and reuses the result.
     /// [`NetChanError::Unavailable`] means the game is not connected to a server.
     pub fn net_chan_stats(&self) -> std::result::Result<NetChanStats, NetChanError> {
+        self.net_chan_anchors()?.read(self.mem.as_ref())
+    }
+
+    /// The signon state and the server the net channel is connected to.
+    ///
+    /// `Ok(None)` means the game is not connected to a server. Shares its resolve with
+    /// [`Reader::net_chan_stats`]; a field whose signature missed is `None` rather than an
+    /// error, so the other one still reads.
+    ///
+    /// # Errors
+    ///
+    /// As [`NetChanAnchors::read_connection`], plus [`NetChanError::Unresolved`] when the
+    /// net channel itself could not be found.
+    pub fn net_connection(&self) -> std::result::Result<Option<NetConnection>, NetChanError> {
+        self.net_chan_anchors()?.read_connection(self.mem.as_ref())
+    }
+
+    /// A signature miss is cached like a success; a module that is not loaded yet is not.
+    fn net_chan_anchors(&self) -> std::result::Result<NetChanAnchors, NetChanError> {
         let mut slot = self
             .net_chan
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let anchors = match *slot {
-            Some(a) => a,
-            None => *slot.insert(NetChanAnchors::resolve(self.mem.as_ref())?),
-        };
-        drop(slot);
-        anchors.read(self.mem.as_ref())
+        if let Some(cached) = slot.as_ref() {
+            return cached.clone();
+        }
+        let resolved = NetChanAnchors::resolve(self.mem.as_ref());
+        if resolved.as_ref().err().is_none_or(netchan::is_permanent) {
+            *slot = Some(resolved.clone());
+        }
+        resolved
     }
 
     /// Build a high-level match snapshot.
