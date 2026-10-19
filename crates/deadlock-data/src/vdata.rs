@@ -33,7 +33,10 @@ use crate::error::{Error, Result};
 use crate::heroes::Hero;
 use crate::items::Item;
 
+mod cc;
+
 pub use crate::install::ARCHIVE;
+pub use cc::{CcAbility, CcKind, CcOwner, cc_abilities};
 /// Path of the hero table inside the archive.
 pub const HEROES_PATH: &str = "scripts/heroes.vdata_c";
 /// Path of the ability, item and weapon table inside the archive.

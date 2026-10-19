@@ -1,0 +1,1634 @@
+<!-- kv3 encoding:text:version{e21c7f3c-8a33-41c5-9977-a76d3a32aa0d} format:generic:version{7412167c-06e9-4698-aff2-e63eb59037e7} -->
+{
+	generic_data_type = "CitadelAbilityVData"
+	ability_necro_zombiewall =
+	{
+		_class = "ability_necro_zombiewall"
+		m_eAbilityType = "EAbilityType_Signature"
+		m_nAbilityTargetTypes = "CITADEL_UNIT_TARGET_HERO_ENEMY | CITADEL_UNIT_TARGET_CREEP_ENEMY | CITADEL_UNIT_TARGET_MINION_ENEMY"
+		m_vecAbilityUpgrades =
+		[
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityDuration"
+						m_strBonus = "2"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "Damage"
+						m_strBonus = "90"
+					},
+					{
+						m_strPropertyName = "ZombieWallLength"
+						m_strBonus = "10m"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "ImmobilizeDuration"
+						m_strBonus = "0.75"
+					},
+					{
+						m_strPropertyName = "SummonCount"
+						m_strBonus = "1"
+					},
+					{
+						m_strPropertyName = "AbilityCooldown"
+						m_strBonus = "-14"
+					},
+				]
+			},
+		]
+		m_mapAbilityProperties =
+		{
+			ZombieWallLength =
+			{
+				m_strValue = "14m"
+			}
+			AuraRadius =
+			{
+				m_strValue = "0.75m"
+			}
+			DebuffDuration =
+			{
+				m_strValue = "0.5"
+			}
+			GroundAuraSpacing =
+			{
+				m_strValue = "1m"
+			}
+			SlowPercent =
+			{
+				m_strValue = "40"
+			}
+			ZombieWallHeight =
+			{
+				m_strValue = "2.5m"
+			}
+			Damage =
+			{
+				m_strValue = "90"
+			}
+			HealAmount =
+			{
+				m_strValue = "0"
+			}
+			BuffDuration =
+			{
+				m_strValue = "0"
+			}
+			BonusMoveSpeedPercent =
+			{
+				m_strValue = "0"
+			}
+			TickRate =
+			{
+				m_strValue = "0.1"
+			}
+			CombatBarrier =
+			{
+				m_strValue = "0"
+			}
+			ImmobilizeDuration =
+			{
+				m_strValue = "1.0"
+			}
+			GroundAuraPopDelay =
+			{
+				m_strValue = "1.1"
+			}
+			ZombieWallDeployTime =
+			{
+				m_strValue = "0.6"
+			}
+			DamagePctPerWallHit =
+			{
+				m_strValue = "0"
+			}
+			TetherDuration =
+			{
+				m_strValue = "1"
+			}
+			TetherRadius =
+			{
+				m_strValue = "0.1m"
+			}
+			SummonCount =
+			{
+				m_strValue = "1"
+			}
+		}
+		m_GroundAuraModifier =
+		{
+			_class = "modifier_zombiewall_ground_aura"
+			_my_subclass_name = "zombiewall"
+			m_iAuraSearchType = ""
+			m_modifierProvidedByAura =
+			{
+				_my_subclass_name = "debuff"
+				_class = "modifier_necro_zombiewall_debuff"
+				m_vecAutoRegisterModifierValueFromAbilityPropertyName = [  ]
+			}
+		}
+		m_GroundAuraPriorityModifier =
+		{
+			_class = "modifier_zombiewall_ground_aura"
+			_my_subclass_name = "zombiewall"
+			m_iAuraSearchType = ""
+			m_modifierProvidedByAura =
+			{
+				_my_subclass_name = "debuff"
+				_class = "modifier_necro_zombiewall_debuff"
+				m_vecAutoRegisterModifierValueFromAbilityPropertyName = [  ]
+			}
+		}
+		m_BuffModifier =
+		{
+			_class = "modifier_base"
+			m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+			[
+				"BonusMoveSpeedPercent",
+				"CombatBarrier",
+			]
+			_my_subclass_name = "buff"
+		}
+		m_ImmobilizeModifier =
+		{
+			_class = "modifier_citadel_root"
+			_my_subclass_name = "immobilize"
+		}
+		m_TetherModifier =
+		{
+			_class = "modifier_necro_zombiewall_tether"
+			_my_subclass_name = "tether"
+		}
+	}
+	ability_necro_gravestone =
+	{
+		_class = "citadel_ability_necro_gravestone"
+		m_eAbilityType = "EAbilityType_Ultimate"
+		m_nAbilityTargetTypes = "CITADEL_UNIT_TARGET_ALL_ENEMY"
+		m_vecAbilityUpgrades =
+		[
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityCooldown"
+						m_strBonus = "-15"
+					},
+					{
+						m_strPropertyName = "MoveSpeedPercent"
+						m_strBonus = "25"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityDuration"
+						m_strBonus = "10"
+						m_strStreetBrawlBonus = "7"
+					},
+					{
+						m_strPropertyName = "SummonFrequency"
+						m_strBonus = "-0.3"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "CurrentHealthDamagePercentage"
+						m_strBonus = "5"
+						m_strStreetBrawlBonus = "3.4"
+					},
+				]
+			},
+		]
+		m_mapAbilityProperties =
+		{
+			GrowTime =
+			{
+				m_strValue = "0.1"
+			}
+			BlockerScaleFactor =
+			{
+				m_strValue = "1"
+			}
+			KnockupSpeed =
+			{
+				m_strValue = "240"
+			}
+			KnockupRadius =
+			{
+				m_strValue = "4m"
+			}
+			KnockupSideRatio =
+			{
+				m_strValue = "1"
+			}
+			GravestoneHealth =
+			{
+				m_strValue = "100"
+			}
+			AuraRadius =
+			{
+				m_strValue = "8m"
+			}
+			TickRate =
+			{
+				m_strValue = "0.4"
+			}
+			SlowPercent =
+			{
+				m_strValue = "64"
+			}
+			SlowDuration =
+			{
+				m_strValue = "1.25"
+			}
+			PushForce =
+			{
+				m_strValue = "300"
+			}
+			MaxGravestones =
+			{
+				m_strValue = "3"
+			}
+			SummonInitialDelay =
+			{
+				m_strValue = "0.3"
+			}
+			SummonFrequency =
+			{
+				m_strValue = "4"
+			}
+			ZombieChargeOnCast =
+			{
+				m_strValue = "0"
+			}
+			BuffDuration =
+			{
+				m_strValue = "-1"
+			}
+			BonusHealthRegen =
+			{
+				m_strValue = "0"
+			}
+			CooldownRefundPercent =
+			{
+				m_strValue = "0"
+			}
+			StackingDebuffTickRate =
+			{
+				m_strValue = "0.25"
+			}
+			MaxHealthRegen =
+			{
+				m_strValue = "0"
+			}
+			Damage =
+			{
+				m_strValue = "115"
+			}
+			GravestoneTakesDamage =
+			{
+				m_strValue = "1"
+			}
+			MaxStacks =
+			{
+				m_strValue = "40"
+			}
+			StackDuration =
+			{
+				m_strValue = "5"
+			}
+			SlowPercentPerStack =
+			{
+				m_strValue = "0.5"
+			}
+			TechArmorDamageReductionPerStack =
+			{
+				m_strValue = "-0.5"
+			}
+			IncomingDamagePercentFromCasterPerStack =
+			{
+				m_strValue = "0"
+			}
+			OutgoingDamagePercentPerStack =
+			{
+				m_strValue = "0"
+			}
+			ReplicateZombieCast =
+			{
+				m_strValue = "1"
+			}
+			SpiritPerStack =
+			{
+				m_strValue = "0"
+			}
+			SummonLifetime =
+			{
+				m_strValue = "20"
+			}
+			DecayTickRate =
+			{
+				m_strValue = "0.1"
+			}
+			DecayDuration =
+			{
+				m_strValue = "1"
+			}
+			SummonMeleeDamage =
+			{
+				m_strValue = "40"
+			}
+			SummonHealth =
+			{
+				m_strValue = "180"
+			}
+			BonusSpiritDamagePercentage =
+			{
+				m_strValue = "15"
+			}
+			CombatBarrier =
+			{
+				m_strValue = "0"
+			}
+			SummonSearchRadius =
+			{
+				m_strValue = "4m"
+			}
+			SummonMaxCount =
+			{
+				m_strValue = "32"
+			}
+			StunDuration =
+			{
+				m_strValue = "0"
+			}
+			ExplodeDelay =
+			{
+				m_strValue = "0.23"
+			}
+			SpawnDuration =
+			{
+				m_strValue = "1.5"
+			}
+			ExplosionRadius =
+			{
+				m_strValue = "6.5m"
+			}
+			MoveSpeedPercent =
+			{
+				m_strValue = "0"
+			}
+			BulletResist =
+			{
+				m_strValue = "12.5"
+			}
+			CurrentHealthDamagePercentage =
+			{
+				m_strValue = "0"
+			}
+			SummonBurstCount =
+			{
+				m_strValue = "2"
+			}
+			SummonBurstFrequency =
+			{
+				m_strValue = "0.1"
+			}
+			DamageSlowPercent =
+			{
+				m_strValue = "20"
+			}
+			DamageSlowDuration =
+			{
+				m_strValue = "0.5"
+			}
+		}
+		m_GraveStoneModifier =
+		{
+			_class = "modifier_gravestone"
+			_my_subclass_name = "gravestone"
+			m_iAuraSearchType = "CITADEL_UNIT_TARGET_HERO_ENEMY"
+			m_nEnabledStateMask = "MODIFIER_STATE_TECH_UNTARGETABLE_BY_ENEMIES | MODIFIER_STATE_IGNORED_BY_NPC_TARGETING"
+			m_modifierProvidedByAura =
+			{
+				_class = "modifier_base"
+				_my_subclass_name = "nearby"
+				m_vecAutoRegisterModifierValueFromAbilityPropertyName = [  ]
+				m_nEnabledStateMask = "MODIFIER_STATE_NEAR_HEAVY_PUNCHABLE_DESTROY"
+			}
+			m_GravestoneCriticalModifier =
+			{
+				_class = "modifier_base"
+				_my_subclass_name = "gravestonecritical"
+			}
+		}
+		m_ZombieSummonModifier =
+		{
+			_class = "modifier_necro_summonzombies_area"
+			_my_subclass_name = "summonzombiesarea"
+			m_SummonModifier =
+			{
+				_class = "modifier_base"
+				_my_subclass_name = "summon_buffs"
+				m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+				[
+					"BonusHealthRegen",
+					"MoveSpeedPercent",
+				]
+			}
+			m_SummonDecayModifier =
+			{
+				_class = "modifier_necro_summondecay"
+				_my_subclass_name = "summon_decay"
+			}
+			m_SpawningInModifier =
+			{
+				_class = "modifier_base"
+				_my_subclass_name = "spawningin"
+				m_nEnabledStateMask = "MODIFIER_STATE_IMMOBILIZED | MODIFIER_STATE_COMMAND_RESTRICTED | MODIFIER_STATE_UNIT_STATUS_HEALTH_HIDDEN | MODIFIER_STATE_UNIT_STATUS_HIDDEN | MODIFIER_STATE_DO_NOT_DRAW_MODEL"
+			}
+		}
+	}
+	ability_bounce_pad =
+	{
+		_class = "ability_bounce_pad"
+		m_eAbilityType = "EAbilityType_Signature"
+		m_nAbilityTargetTypes = "CITADEL_UNIT_TARGET_ALL_ENEMY"
+		m_vecAbilityUpgrades =
+		[
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityCooldown"
+						m_strBonus = "-10"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "SpeedOnLand"
+						m_strBonus = "4m"
+					},
+					{
+						m_strPropertyName = "SpeedOnLandDuration"
+						m_strBonus = "4"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "StompStunDuration"
+						m_strBonus = 0.7
+					},
+				]
+			},
+		]
+		m_mapAbilityProperties =
+		{
+			BounceVelocity =
+			{
+				m_strValue = "750"
+			}
+			UpFactor =
+			{
+				m_strValue = "1.2"
+			}
+			BarrelBounceVelocity =
+			{
+				m_strValue = "800"
+			}
+			BarrelUpFactor =
+			{
+				m_strValue = "1"
+			}
+			Scale =
+			{
+				m_strValue = "1"
+			}
+			PlaceDistance =
+			{
+				m_strValue = "200"
+			}
+			AirControlPercent =
+			{
+				m_strValue = "100"
+			}
+			AirControlAccelPercent =
+			{
+				m_strValue = "50"
+			}
+			MinAirTimeForStomp =
+			{
+				m_strValue = "0.2"
+			}
+			Radius =
+			{
+				m_strValue = "9m"
+			}
+			VerticalDifferenceTolerance =
+			{
+				m_strValue = "60"
+			}
+			TossSpeed =
+			{
+				m_strValue = "500"
+			}
+			StompDamage =
+			{
+				m_strValue = 60
+			}
+			StompStunDuration =
+			{
+				m_strValue = "0"
+			}
+			SpeedOnLand =
+			{
+				m_strValue = "0m"
+			}
+			SpeedOnLandDuration =
+			{
+				m_strValue = "0"
+			}
+		}
+		m_BounceModifier =
+		{
+			_class = "modifier_citadel_bounce_pad_stomp"
+			_my_subclass_name = "modifier_citadel_bounce_pad_stomp"
+		}
+		m_AllyBounceModifier =
+		{
+			_class = "modifier_bounce_pad_ally"
+			_my_subclass_name = "modifier_bounce_pad_ally"
+		}
+		m_SpeedOnLandModifier =
+		{
+			_class = "modifier_base"
+			_my_subclass_name = "speed_on_land"
+			m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+			[
+				"SpeedOnLand",
+			]
+		}
+	}
+	citadel_ability_hook =
+	{
+		_class = "citadel_ability_hook"
+		m_eAbilityType = "EAbilityType_Signature"
+		m_nAbilityTargetTypes = "CITADEL_UNIT_TARGET_HERO | CITADEL_UNIT_TARGET_TROOPER_ENEMY | CITADEL_UNIT_TARGET_NEUTRAL"
+		m_vecAbilityUpgrades =
+		[
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "BulletAmp"
+						m_strBonus = "20"
+					},
+					{
+						m_strPropertyName = "BulletAmpDuration"
+						m_strBonus = "6"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityCastRange"
+						m_strBonus = "30m"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityCooldown"
+						m_strBonus = -11.5
+					},
+				]
+			},
+		]
+		m_mapAbilityProperties =
+		{
+			HookingSlowSpeedLimit =
+			{
+				m_strValue = "5"
+			}
+			Damage =
+			{
+				m_strValue = "0"
+			}
+			SlowPercent =
+			{
+				m_strValue = "72"
+			}
+			RestrictionDuration =
+			{
+				m_strValue = "0.5"
+			}
+			EndOfHookMoveSpeedBonus =
+			{
+				m_strValue = "0m"
+			}
+			ResetCooldownOnFriendlyHook =
+			{
+				m_strValue = "0"
+			}
+			FriendlyHookIgnoreRange =
+			{
+				m_strValue = "8m"
+			}
+			BulletAmp =
+			{
+				m_strValue = "0"
+			}
+			BulletAmpDuration =
+			{
+				m_strValue = "0"
+			}
+			CancelHookDuration =
+			{
+				m_strValue = "0.2"
+			}
+			HookImpactDelay =
+			{
+				m_strValue = "0.5"
+			}
+		}
+		m_projectileInfo =
+		{
+			m_AutoProjectileModifier =
+			{
+				_class = "modifier_intrinsic_base"
+				_my_subclass_name = "modifier_intrinsic_base"
+			}
+		}
+		m_SelfModifier =
+		{
+			_class = "modifier_citadel_hookself"
+			_my_subclass_name = "modifier_citadel_hookself"
+			m_nEnabledStateMask = "MODIFIER_STATE_CASTING_HOOK"
+		}
+		m_TargetModifier =
+		{
+			_my_subclass_name = "modifier_citadel_hooktarget"
+			_class = "modifier_citadel_hooktarget"
+			m_nEnabledStateMask = ""
+			m_RestrictionModifier =
+			{
+				_class = "modifier_slow_base"
+				_my_subclass_name = "modifier_slow_bases"
+				m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+				[
+					"SlowPercent",
+				]
+				m_nEnabledStateMask = "MODIFIER_STATE_SILENCE_MOVEMENT_ABILITES | MODIFIER_STATE_MOVEMENT_ABILITY_ACTIVATION_RESTRICTED | MODIFIER_STATE_MOVEMENT_INPUT_DISABLED | MODIFIER_STATE_DASH_DISABLED | MODIFIER_STATE_AIR_JUMPS_DISABLED | MODIFIER_STATE_SLOWED"
+			}
+		}
+		m_BulletAmpModifier =
+		{
+			_class = "modifier_bebop_hook_bullet_amp"
+			_my_subclass_name = "modifier_bebop_hook_bullet_amp"
+		}
+	}
+	ability_incendiary_projectile =
+	{
+		_class = "ability_incendiary_projectile"
+		m_eAbilityType = "EAbilityType_Signature"
+		m_nAbilityTargetTypes = "CITADEL_UNIT_TARGET_ALL_ENEMY"
+		m_vecAbilityUpgrades =
+		[
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityCharges"
+						m_strBonus = "1"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "LifestealPercentHero"
+						m_strBonus = "15"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "IncomingDamagePercentFromCaster"
+						m_strBonus = "17"
+					},
+					{
+						m_strPropertyName = "HealAmpReceivePenaltyPercent"
+						m_strBonus = "-33"
+					},
+					{
+						m_strPropertyName = "HealAmpRegenPenaltyPercent"
+						m_strBonus = "-33"
+					},
+				]
+			},
+		]
+		m_mapAbilityProperties =
+		{
+			TickRate =
+			{
+				m_strValue = "0.5"
+			}
+			ParticleRadiusMultiplier =
+			{
+				m_strValue = "1.15"
+			}
+			IncomingDamagePercentFromCaster =
+			{
+				m_strValue = "16"
+			}
+			DebuffDuration =
+			{
+				m_strValue = "8"
+			}
+			Damage =
+			{
+				m_strValue = 40.0
+			}
+			LifestealPercentHero =
+			{
+				m_strValue = "0"
+			}
+			HeightOffGround =
+			{
+				m_strValue = "50"
+			}
+			GrowthPerMeter =
+			{
+				m_strValue = "0.5m"
+			}
+			InitialWidth =
+			{
+				m_strValue = "1m"
+			}
+			SlowDuration =
+			{
+				m_strValue = "4"
+			}
+			SlowPercent =
+			{
+				m_strValue = "28"
+			}
+			HealAmpReceivePenaltyPercent =
+			{
+				m_strValue = "0"
+			}
+			HealAmpRegenPenaltyPercent =
+			{
+				m_strValue = "0"
+			}
+		}
+		m_projectileInfo =
+		{
+			m_AutoProjectileModifier =
+			{
+				_class = "modifier_cone_wave_projectile"
+				_my_subclass_name = "modifier_cone_wave_projectile"
+			}
+		}
+		m_DebuffModifier =
+		{
+			_class = "modifier_incendiary_debuff"
+			_my_subclass_name = "modifier_incendiary_debuff"
+			m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+			[
+				"HealAmpReceivePenaltyPercent",
+				"HealAmpRegenPenaltyPercent",
+			]
+		}
+		m_SlowModifier =
+		{
+			_my_subclass_name = "slow"
+			_class = "modifier_slow_base"
+			m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+			[
+				"SlowPercent",
+			]
+		}
+	}
+	ability_immobilize_trap =
+	{
+		_class = "ability_immobilize_trap"
+		m_eAbilityType = "EAbilityType_Signature"
+		m_nAbilityTargetTypes = "CITADEL_UNIT_TARGET_HERO_ENEMY"
+		m_vecAbilityUpgrades =
+		[
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityCooldown"
+						m_strBonus = -20.0
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "BulletArmorReduction"
+						m_strBonus = "-15"
+					},
+					{
+						m_strPropertyName = "DebuffDuration"
+						m_strBonus = "10"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "TetherDuration"
+						m_strBonus = "1"
+					},
+					{
+						m_strPropertyName = "Radius"
+						m_strBonus = "1.5m"
+					},
+				]
+			},
+		]
+		m_mapAbilityProperties =
+		{
+			TetherRadius =
+			{
+				m_strValue = "6m"
+			}
+			Radius =
+			{
+				m_strValue = "6.5m"
+			}
+			TrapHeight =
+			{
+				m_strValue = "2m"
+			}
+			Lifetime =
+			{
+				m_strValue = "22"
+			}
+			Damage =
+			{
+				m_strValue = 25
+			}
+			TetherDuration =
+			{
+				m_strValue = "2.25"
+			}
+			TripTime =
+			{
+				m_strValue = "0.5"
+			}
+			ArmTime =
+			{
+				m_strValue = "2.0"
+			}
+			TripUpSpeed =
+			{
+				m_strValue = "250"
+			}
+			TripGravity =
+			{
+				m_strValue = "0.4"
+			}
+			DisarmTargets =
+			{
+				m_strValue = "0"
+			}
+			SkipFrames =
+			{
+				m_strValue = "6"
+			}
+			BulletArmorReduction =
+			{
+				m_strValue = "0"
+			}
+			BulletVulnerbility =
+			{
+				m_strValue = "0"
+			}
+			DebuffDuration =
+			{
+				m_strValue = "0"
+			}
+			SlowPercent =
+			{
+				m_strValue = "24"
+			}
+			ChargedShotHitRadiusScale =
+			{
+				m_strValue = "30"
+			}
+		}
+		m_GlitchModifier =
+		{
+			_my_subclass_name = "modifier_glitch_debuff"
+			_class = "modifier_glitch_debuff"
+			m_nEnabledStateMask = "MODIFIER_STATE_DISARMED | MODIFIER_STATE_SILENCED | MODIFIER_STATE_MUTED | MODIFIER_STATE_GLITCHED"
+			m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+			[
+				"SkipFrames",
+				"SlowPercent",
+			]
+		}
+		m_DebuffModifier =
+		{
+			_class = "modifier_base"
+			_my_subclass_name = "modifier_immobilize_trap_debuff"
+			m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+			[
+				"BulletArmorReduction",
+			]
+		}
+	}
+	ability_ice_dome =
+	{
+		_class = "ability_ice_dome"
+		m_eAbilityType = "EAbilityType_Ultimate"
+		m_nAbilityTargetTypes = "CITADEL_UNIT_TARGET_HERO"
+		m_vecAbilityUpgrades =
+		[
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityCooldown"
+						m_strBonus = "-20"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityDuration"
+						m_strBonus = 1.5
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "BonusHealthRegen"
+						m_strBonus = "65"
+					},
+					{
+						m_strPropertyName = "BonusHealthRegen"
+						m_strBonus = 1.0
+						m_eUpgradeType = "EAddToScale"
+						m_eScaleStatFilter = "ETechPower"
+					},
+					{
+						m_strPropertyName = "PurgeOnCast"
+						m_strBonus = "1"
+					},
+				]
+			},
+		]
+		m_mapAbilityProperties =
+		{
+			Radius =
+			{
+				m_strValue = "10m"
+			}
+			BlockerScaleFactor =
+			{
+				m_strValue = "115"
+			}
+			GrowTime =
+			{
+				m_strValue = "0.2"
+			}
+			EnemyDragSpeed =
+			{
+				m_strValue = "1000"
+			}
+			BonusHealthRegen =
+			{
+				m_strValue = "90"
+			}
+			MaxHealthRegen =
+			{
+				m_strValue = "0"
+			}
+			SlowPercent =
+			{
+				m_strValue = "28"
+			}
+			FireRateSlow =
+			{
+				m_strValue = "0"
+			}
+			PurgeOnCast =
+			{
+				m_strValue = "0"
+			}
+			FreezeEnemies =
+			{
+				m_strValue = "0"
+			}
+		}
+		m_IceDomeModifier =
+		{
+			_class = "modifier_ice_dome"
+			_my_subclass_name = "modifier_ice_dome"
+			m_nEnabledStateMask = "MODIFIER_STATE_SINCLAIR_TAX_ULT_ACTIVE"
+			m_FriendlyAuraModifier =
+			{
+				_class = "modifier_base_aura"
+				_my_subclass_name = "ice_dome_friendly_aura"
+				m_iAuraSearchType = "CITADEL_UNIT_TARGET_ALL_FRIENDLY"
+				m_modifierProvidedByAura =
+				{
+					_class = "modifier_ice_dome_friendly"
+					_my_subclass_name = "modifier_ice_dome_friendly"
+				}
+			}
+			m_EnemyAuraModifier =
+			{
+				_class = "modifier_base_aura"
+				_my_subclass_name = "ice_dome_enemy_aura"
+				m_iAuraSearchType = "CITADEL_UNIT_TARGET_ALL_ENEMY | CITADEL_UNIT_TARGET_TROPHY"
+				m_modifierProvidedByAura =
+				{
+					_class = "modifier_icedome_auramodifier_base"
+					_my_subclass_name = "modifier_debuff"
+					m_nEnabledStateMask = "MODIFIER_STATE_SLOWED"
+					m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+					[
+						"FireRateSlow",
+						"SlowPercent",
+					]
+				}
+			}
+			m_EnemyFreezeAuraModifier =
+			{
+				_class = "modifier_base_aura"
+				_my_subclass_name = "freeze_aura"
+				m_iAuraSearchType = "CITADEL_UNIT_TARGET_ALL_ENEMY"
+				m_modifierProvidedByAura =
+				{
+					_my_subclass_name = "freeze_debuff"
+					_class = "modifier_base"
+					m_nEnabledStateMask = "MODIFIER_STATE_COMMAND_RESTRICTED"
+				}
+			}
+		}
+	}
+	citadel_ability_tangotether =
+	{
+		_class = "citadel_ability_tangotether"
+		m_eAbilityType = "EAbilityType_Signature"
+		m_nAbilityTargetTypes = "CITADEL_UNIT_TARGET_ALL_FRIENDLY"
+		m_vecAbilityUpgrades =
+		[
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "MoveSpeedBonus"
+						m_strBonus = "2m"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "BonusFireRate"
+						m_strBonus = "8"
+					},
+					{
+						m_strPropertyName = "BulletLifestealPercent"
+						m_strBonus = "8"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityDuration"
+						m_strBonus = "-13"
+					},
+					{
+						m_strPropertyName = "AbilityCooldown"
+						m_strBonus = "-37"
+					},
+				]
+			},
+		]
+		m_mapAbilityProperties =
+		{
+			BonusFireRate =
+			{
+				m_strValue = "10"
+			}
+			BulletLifestealPercent =
+			{
+				m_strValue = "15"
+			}
+			MoveSpeedBonus =
+			{
+				m_strValue = "0m"
+			}
+			TickRate =
+			{
+				m_strValue = "0.1"
+			}
+			TetherSharedHealPct =
+			{
+				m_strValue = "35"
+			}
+			HealingPerGlub =
+			{
+				m_strValue = "20"
+			}
+			TotalTetherTargets =
+			{
+				m_strValue = "1"
+			}
+			MoveWhileShootingSpeedPenaltyReductionPercent =
+			{
+				m_strValue = "100"
+			}
+			MoveWhileZoomedSpeedPenaltyReductionPercent =
+			{
+				m_strValue = "100"
+			}
+		}
+		m_TetherModifier =
+		{
+			_class = "citadel_modifier_tangotether_tether"
+			_my_subclass_name = "citadel_modifier_tangotether_tether"
+			m_BuffModifier =
+			{
+				_class = "citadel_modifier_tangotether_tether_receiver"
+				_my_subclass_name = "citadel_modifier_tangotether_tether_receiver"
+				m_nEnabledStateMask = "MODIFIER_STATE_COOP_TETHER_ACTIVE"
+				m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+				[
+					"BonusFireRate",
+					"BulletLifestealPercent",
+					"MoveSpeedBonus",
+					"MoveWhileShootingSpeedPenaltyReductionPercent",
+					"MoveWhileZoomedSpeedPenaltyReductionPercent",
+				]
+			}
+			m_LockedTargetModifier =
+			{
+				_class = "modifier_base"
+				_my_subclass_name = "tether_locked_modifier"
+				m_nEnabledStateMask = "MODIFIER_STATE_COOP_TETHER_LOCKED_TARGET"
+			}
+			m_NoConnectionModifier =
+			{
+				_class = "modifier_tether_no_connection"
+				_my_subclass_name = "modifier_tether_no_connection"
+			}
+		}
+		m_GrappleTargetModifier =
+		{
+			_class = "citadel_modifier_tangotether_target"
+			_my_subclass_name = "target"
+		}
+	}
+	ability_health_swap =
+	{
+		_class = "ability_health_swap"
+		m_eAbilityType = "EAbilityType_Ultimate"
+		m_nAbilityTargetTypes = "CITADEL_UNIT_TARGET_HERO_ENEMY"
+		m_vecAbilityUpgrades =
+		[
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityCooldown"
+						m_strBonus = -50.0
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "SilenceDuration"
+						m_strBonus = "3"
+					},
+					{
+						m_strPropertyName = "SilenceRadius"
+						m_strBonus = "25m"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "SelfBuffDuration"
+						m_strBonus = "8"
+					},
+					{
+						m_strPropertyName = "TechResist"
+						m_strBonus = "50"
+					},
+					{
+						m_strPropertyName = "BonusFireRate"
+						m_strBonus = "40"
+					},
+					{
+						m_strPropertyName = "BonusSpirit"
+						m_strBonus = "60"
+					},
+				]
+			},
+		]
+		m_mapAbilityProperties =
+		{
+			PostCastHoldTime =
+			{
+				m_strValue = "0.2"
+			}
+			InitialUpSpeed =
+			{
+				m_strValue = "150"
+			}
+			EnemyMinHealthPct =
+			{
+				m_strValue = "30"
+			}
+			MinHealthTakenPct =
+			{
+				m_strValue = "30"
+			}
+			HPOnHealthSteal =
+			{
+				m_strValue = "0"
+			}
+			MinDiffToCast =
+			{
+				m_strValue = "0.1"
+			}
+			EnemySlowPct =
+			{
+				m_strValue = "56"
+			}
+			SelfBuffDuration =
+			{
+				m_strValue = "0"
+			}
+			TechResist =
+			{
+				m_strValue = "0"
+			}
+			BonusFireRate =
+			{
+				m_strValue = "0"
+			}
+			BonusSpirit =
+			{
+				m_strValue = "0"
+			}
+			SilenceDuration =
+			{
+				m_strValue = "0"
+			}
+			SilenceRadius =
+			{
+				m_strValue = "0m"
+			}
+		}
+		m_PreCastModifier =
+		{
+			_class = "modifier_healthswap_precast"
+			_my_subclass_name = "modifier_healthswap_precast"
+		}
+		m_SwapModifier =
+		{
+			_class = "modifier_health_swap_debuff"
+			_my_subclass_name = "modifier_health_swap_debuff"
+		}
+		m_BuffModifier =
+		{
+			_class = "modifier_base"
+			_my_subclass_name = "modifier_base"
+			m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+			[
+				"BonusFireRate",
+				"TechResist",
+				"BonusSpirit",
+			]
+		}
+		m_SilenceModifier =
+		{
+			_class = "modifier_citadel_silenced"
+			_my_subclass_name = "modifier_citadel_silenced"
+		}
+	}
+	ability_ult_combo =
+	{
+		_class = "ability_ult_combo"
+		m_eAbilityType = "EAbilityType_Ultimate"
+		m_nAbilityTargetTypes = "CITADEL_UNIT_TARGET_HERO_ENEMY"
+		m_vecAbilityUpgrades =
+		[
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "LifeStealPercentOnHit"
+						m_strBonus = "100"
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityCooldown"
+						m_strBonus = -30
+					},
+					{
+						m_strPropertyName = "BulletResist"
+						m_strBonus = 50
+					},
+				]
+			},
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "AbilityChannelTime"
+						m_strBonus = "0.7"
+					},
+					{
+						m_strPropertyName = "DPS"
+						m_strBonus = 40
+					},
+					{
+						m_strPropertyName = "DPS"
+						m_strBonus = 0.4
+						m_eUpgradeType = "EAddToScale"
+						m_eScaleStatFilter = "ETechPower"
+					},
+				]
+			},
+		]
+		m_mapAbilityProperties =
+		{
+			DPS =
+			{
+				m_strValue = 40
+			}
+			LifeStealPercentOnHit =
+			{
+				m_strValue = "0"
+			}
+			BonusHealthOnKill =
+			{
+				m_strValue = "40"
+			}
+			BulletResist =
+			{
+				m_strValue = "0"
+			}
+		}
+		m_AutoIntrinsicModifiers =
+		[
+			{
+				_class = "modifier_ult_combo_bonus_health"
+				_my_subclass_name = "modifier_ult_combo_bonus_health"
+			},
+		]
+		m_SelfModifier =
+		{
+			_class = "modifier_ult_combo_self"
+			_my_subclass_name = "modifier_ult_combo_self"
+			m_nEnabledStateMask = "MODIFIER_STATE_FORCE_CAN_PARRY"
+			m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+			[
+				"BulletResist",
+			]
+		}
+		m_TargetModifier =
+		{
+			_class = "modifier_ult_combo_target"
+			_my_subclass_name = "modifier_ult_combo_target"
+			m_AttachModifier =
+			{
+				_class = "modifier_drag_custom"
+				_my_subclass_name = "modifier_ult_combo_attach"
+			}
+		}
+		m_KillCheckModifier =
+		{
+			_class = "modifier_base"
+			_my_subclass_name = "killcheck_modifier"
+		}
+	}
+	upgrade_target_stun =
+	{
+		_class = "upgrade_target_stun"
+		m_eAbilityType = "EAbilityType_Item"
+		m_nAbilityTargetTypes = "CITADEL_UNIT_TARGET_HERO_ENEMY"
+		m_iItemTier = "EModTier_3"
+		m_vecAbilityUpgrades =
+		[
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "TechRadiusMultiplier"
+						m_strBonus = "6"
+					},
+					{
+						m_strPropertyName = "TechRangeMultiplier"
+						m_strBonus = "6"
+					},
+					{
+						m_strPropertyName = "StunDuration"
+						m_strBonus = "0.75"
+					},
+					{
+						m_strPropertyName = "BonusHealth"
+						m_strBonus = "75"
+					},
+				]
+			},
+		]
+		m_mapAbilityProperties =
+		{
+			StunDelay =
+			{
+				m_strValue = "2"
+			}
+			StunDuration =
+			{
+				m_strValue = "0.5"
+			}
+			VisualContractRadius =
+			{
+				m_strValue = "3m"
+			}
+			BonusHealth =
+			{
+				m_strValue = "75"
+			}
+			MaxBonusDuration =
+			{
+				m_strValue = "1.5"
+			}
+			MaxHeightForBonus =
+			{
+				m_strValue = "30m"
+			}
+			TechRangeMultiplier =
+			{
+				m_strValue = "5"
+			}
+			TechRadiusMultiplier =
+			{
+				m_strValue = "5"
+			}
+		}
+		m_StunDelayModifier =
+		{
+			_class = "modifier_citadel_delayed_stun"
+			_my_subclass_name = "modifier_citadel_delayed_stun"
+		}
+		m_AutoIntrinsicModifiers =
+		[
+			{
+				_class = "modifier_intrinsic_base"
+				_my_subclass_name = "modifier_intrinsic_base"
+				m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+				[
+					"BonusHealth",
+					"TechRangeMultiplier",
+					"TechRadiusMultiplier",
+				]
+			},
+		]
+	}
+	upgrade_rescue_beam =
+	{
+		_class = "upgrade_rescue_beam"
+		m_eAbilityType = "EAbilityType_Item"
+		m_nAbilityTargetTypes = "CITADEL_UNIT_TARGET_HERO_FRIENDLY"
+		m_iItemTier = "EModTier_3"
+		m_vecAbilityUpgrades =
+		[
+			{
+				m_vecPropertyUpgrades =
+				[
+					{
+						m_strPropertyName = "TechRadiusMultiplier"
+						m_strBonus = "20"
+					},
+					{
+						m_strPropertyName = "TechRangeMultiplier"
+						m_strBonus = "20"
+					},
+					{
+						m_strPropertyName = "HealPercentAmount"
+						m_strBonus = "15"
+					},
+					{
+						m_strPropertyName = "AbilityCooldown"
+						m_strBonus = "-45"
+					},
+				]
+			},
+		]
+		m_mapAbilityProperties =
+		{
+			HealPercentAmount =
+			{
+				m_strValue = "20"
+			}
+			HealInterval =
+			{
+				m_strValue = "0.2"
+			}
+			BonusMoveSpeed =
+			{
+				m_strValue = "0m"
+			}
+			BonusSprintSpeed =
+			{
+				m_strValue = "0.75m"
+			}
+			SelfModifier =
+			{
+				m_strValue = "100"
+			}
+			TechRangeMultiplier =
+			{
+				m_strValue = "6"
+			}
+			TechRadiusMultiplier =
+			{
+				m_strValue = "6"
+			}
+		}
+		m_DispelAndHealModifier =
+		{
+			_class = "modifier_citadel_rescue_beam"
+			_my_subclass_name = "modifier_citadel_rescue_beam"
+		}
+		m_PullModifier =
+		{
+			_class = "modifier_succor_move"
+			_my_subclass_name = "rescume_beam_pull"
+		}
+		m_AutoIntrinsicModifiers =
+		[
+			{
+				_my_subclass_name = "modifier_intrinsic_base"
+				_class = "modifier_intrinsic_base"
+				m_vecAutoRegisterModifierValueFromAbilityPropertyName =
+				[
+					"BonusSprintSpeed",
+					"TechRangeMultiplier",
+					"TechRadiusMultiplier",
+				]
+			},
+		]
+	}
+}

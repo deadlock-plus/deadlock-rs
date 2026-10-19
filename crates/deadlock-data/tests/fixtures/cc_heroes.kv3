@@ -1,0 +1,130 @@
+<!-- kv3 encoding:text:version{e21c7f3c-8a33-41c5-9977-a76d3a32aa0d} format:generic:version{7412167c-06e9-4698-aff2-e63eb59037e7} -->
+{
+	generic_data_type = "CitadelHeroData_t"
+	hero_necro =
+	{
+		m_HeroID = 76
+		m_eHeroDevelopmentState = "EHeroDevState_Release"
+		m_bDisabled = false
+		m_bInDevelopment = false
+		m_mapBoundAbilities =
+		{
+			ESlot_Signature_1 = "ability_necro_hauntingskull"
+			ESlot_Signature_2 = "ability_necro_zombiewall"
+			ESlot_Signature_3 = "ability_necro_fear"
+			ESlot_Signature_4 = "ability_necro_gravestone"
+		}
+	}
+	hero_astro =
+	{
+		m_HeroID = 14
+		m_eHeroDevelopmentState = "EHeroDevState_Release"
+		m_bDisabled = false
+		m_bInDevelopment = false
+		m_mapBoundAbilities =
+		{
+			ESlot_Signature_1 = "ability_explosive_barrel"
+			ESlot_Signature_2 = "ability_bounce_pad"
+			ESlot_Signature_3 = "ability_crackshot"
+			ESlot_Signature_4 = "ability_gravity_lasso"
+		}
+	}
+	hero_bebop =
+	{
+		m_HeroID = 15
+		m_eHeroDevelopmentState = "EHeroDevState_Release"
+		m_bDisabled = false
+		m_bInDevelopment = false
+		m_mapBoundAbilities =
+		{
+			ESlot_Signature_1 = "citadel_ability_uppercut"
+			ESlot_Signature_2 = "citadel_ability_sticky_bomb"
+			ESlot_Signature_3 = "citadel_ability_hook"
+			ESlot_Signature_4 = "citadel_ability_bebop_laser_beam"
+		}
+	}
+	hero_inferno =
+	{
+		m_HeroID = 1
+		m_eHeroDevelopmentState = "EHeroDevState_Release"
+		m_bDisabled = false
+		m_bInDevelopment = false
+		m_mapBoundAbilities =
+		{
+			ESlot_Signature_1 = "ability_incendiary_projectile"
+			ESlot_Signature_2 = "ability_flame_dash"
+			ESlot_Signature_3 = "ability_afterburn"
+			ESlot_Signature_4 = "ability_fire_bomb"
+		}
+	}
+	hero_orion =
+	{
+		m_HeroID = 17
+		m_eHeroDevelopmentState = "EHeroDevState_Release"
+		m_bDisabled = false
+		m_bInDevelopment = false
+		m_mapBoundAbilities =
+		{
+			ESlot_Signature_1 = "ability_charged_shot"
+			ESlot_Signature_2 = "ability_power_jump"
+			ESlot_Signature_3 = "ability_immobilize_trap"
+			ESlot_Signature_4 = "ability_guided_arrow"
+		}
+	}
+	hero_kelvin =
+	{
+		m_HeroID = 12
+		m_eHeroDevelopmentState = "EHeroDevState_Release"
+		m_bDisabled = false
+		m_bInDevelopment = false
+		m_mapBoundAbilities =
+		{
+			ESlot_Signature_1 = "ability_ice_grenade"
+			ESlot_Signature_2 = "ability_icepath"
+			ESlot_Signature_3 = "ability_icebeam"
+			ESlot_Signature_4 = "ability_ice_dome"
+		}
+	}
+	hero_tengu =
+	{
+		m_HeroID = 20
+		m_eHeroDevelopmentState = "EHeroDevState_Release"
+		m_bDisabled = false
+		m_bInDevelopment = false
+		m_mapBoundAbilities =
+		{
+			ESlot_Signature_1 = "citadel_ability_tengu_urn"
+			ESlot_Signature_2 = "citadel_ability_tangotether"
+			ESlot_Signature_3 = "citadel_ability_tengu_stone_form"
+			ESlot_Signature_4 = "citadel_ability_tengu_airlift"
+		}
+	}
+	hero_ghost =
+	{
+		m_HeroID = 4
+		m_eHeroDevelopmentState = "EHeroDevState_Release"
+		m_bDisabled = false
+		m_bInDevelopment = false
+		m_mapBoundAbilities =
+		{
+			ESlot_Signature_1 = "ability_blood_bomb"
+			ESlot_Signature_2 = "ability_life_drain"
+			ESlot_Signature_3 = "ability_blood_shards"
+			ESlot_Signature_4 = "ability_health_swap"
+		}
+	}
+	hero_krill =
+	{
+		m_HeroID = 18
+		m_eHeroDevelopmentState = "EHeroDevState_Release"
+		m_bDisabled = false
+		m_bInDevelopment = false
+		m_mapBoundAbilities =
+		{
+			ESlot_Signature_1 = "ability_intimidate"
+			ESlot_Signature_2 = "ability_burrow"
+			ESlot_Signature_3 = "ability_throw_sand"
+			ESlot_Signature_4 = "ability_ult_combo"
+		}
+	}
+}
