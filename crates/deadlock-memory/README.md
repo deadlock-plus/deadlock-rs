@@ -9,7 +9,8 @@ Nothing here is specific to any one program. The Deadlock reader built on top of
 It is strictly read-only. There is no `WriteProcessMemory`, no injection, no hooking, no
 remote thread creation, and no calling into the target anywhere in this crate. The only
 Win32 calls it makes are `OpenProcess`, `ReadProcessMemory`, `VirtualQueryEx`, the
-Toolhelp32 snapshot family and `CloseHandle`.
+Toolhelp32 snapshot family and `CloseHandle`, plus `GetThreadPriority` and
+`SetThreadPriority` on the caller's own thread.
 
 ## Usage
 
@@ -49,6 +50,7 @@ is reported as `Error::PtraceDenied` with advice matched to the current setting.
 | `macos` | macOS backend: Mach task port + `proc_regionfilename` (best effort) |
 | `process` | Windows backend: `ReadProcessMemory` + `VirtualQueryEx` |
 | `region` | Committed RW region filter and region scanning |
+| `priority` | Below-normal priority for the calling thread while a long scan runs (Windows) |
 | `sig` | AOB pattern engine + RIP-relative resolution (pure, no OS deps) |
 | `error` | The crate's error type |
 

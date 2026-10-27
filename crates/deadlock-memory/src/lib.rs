@@ -34,6 +34,7 @@ pub mod mem;
 /// [`MemoryReader`] can do the same.
 #[cfg(any(test, feature = "mock"))]
 pub mod mock;
+pub mod priority;
 pub mod procmaps;
 pub mod region;
 pub mod sig;

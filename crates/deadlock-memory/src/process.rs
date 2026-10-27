@@ -1,8 +1,8 @@
 //! Windows [`MemoryReader`] backend. Read-only by construction.
 //!
 //! The only Win32 calls made are `OpenProcess`, `ReadProcessMemory`, `VirtualQueryEx`,
-//! the Toolhelp32 snapshot family, and `CloseHandle`. There is deliberately no write
-//! path.
+//! the Toolhelp32 snapshot family, and `CloseHandle`, plus the calling thread's own
+//! priority for [`crate::priority`]. There is deliberately no write path.
 
 use std::ffi::c_void;
 use std::path::PathBuf;
@@ -17,7 +17,8 @@ use windows_sys::Win32::System::Diagnostics::ToolHelp::{
 };
 use windows_sys::Win32::System::Memory::{MEMORY_BASIC_INFORMATION, VirtualQueryEx};
 use windows_sys::Win32::System::Threading::{
-    OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+    GetCurrentThread, GetThreadPriority, OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+    SetThreadPriority,
 };
 
 use crate::error::{Error, Result};
@@ -31,6 +32,19 @@ pub const ACCESS_READ: u32 = PROCESS_QUERY_INFORMATION | PROCESS_VM_READ;
 
 /// Access mask for a query-only handle, as the original uses for region enumeration.
 pub const ACCESS_QUERY: u32 = PROCESS_QUERY_INFORMATION;
+
+/// The calling thread's priority level.
+pub(crate) fn thread_priority() -> i32 {
+    // SAFETY: `GetCurrentThread` returns a pseudo-handle that is always valid for the
+    // calling thread and needs no closing.
+    unsafe { GetThreadPriority(GetCurrentThread()) }
+}
+
+/// Set the calling thread's priority level; false if Windows refused.
+pub(crate) fn set_thread_priority(priority: i32) -> bool {
+    // SAFETY: as in `thread_priority`; only the calling thread is changed.
+    unsafe { SetThreadPriority(GetCurrentThread(), priority) != 0 }
+}
 
 /// An open, read-only handle to a process.
 #[derive(Debug)]
