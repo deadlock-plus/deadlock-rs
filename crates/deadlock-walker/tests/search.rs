@@ -176,3 +176,79 @@ fn a_hit_across_a_chunk_boundary_is_found_whatever_the_chunk_size() {
         );
     }
 }
+
+fn flat_heap(base: u64, len: usize) -> deadlock_memory::mock::MockMemory {
+    let mut mem = deadlock_memory::mock::MockMemory::new(1);
+    mem.write(base, &vec![0u8; len]).add_region(base, len);
+    mem
+}
+
+#[test]
+fn a_search_rests_between_chunks_once_its_burst_is_spent() {
+    use std::time::{Duration, Instant};
+    let mem = flat_heap(0x5000_0000, 8 * 4096);
+    let config = SearchConfig {
+        chunk: 4096,
+        threads: 1,
+        burst: Duration::ZERO,
+        rest: Duration::from_millis(5),
+        ..SearchConfig::default()
+    };
+    let started = Instant::now();
+    find_instances(&mem, 0x7ffa_1234_5678, &config).unwrap();
+    assert!(
+        started.elapsed() >= Duration::from_millis(35),
+        "{:?}",
+        started.elapsed()
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn every_search_read_runs_below_normal_priority() {
+    use deadlock_memory::mem::Module;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct Watched {
+        mem: deadlock_memory::mock::MockMemory,
+        normal: AtomicUsize,
+    }
+    impl MemoryReader for Watched {
+        fn pid(&self) -> u32 {
+            self.mem.pid()
+        }
+        fn read_into(&self, addr: u64, buf: &mut [u8]) -> deadlock_memory::Result<()> {
+            self.mem.read_into(addr, buf)
+        }
+        fn read_partial(&self, addr: u64, buf: &mut [u8]) -> usize {
+            if !deadlock_memory::priority::is_lowered() {
+                self.normal.fetch_add(1, Ordering::Relaxed);
+            }
+            self.mem.read_partial(addr, buf)
+        }
+        fn modules(&self) -> deadlock_memory::Result<Vec<Module>> {
+            self.mem.modules()
+        }
+        fn regions(&self) -> deadlock_memory::Result<Vec<Region>> {
+            self.mem.regions()
+        }
+    }
+
+    let mut mem = flat_heap(0x5000_0000, 4 * 4096);
+    mem.write(0x6000_0000, &[0u8; 4096])
+        .add_region(0x6000_0000, 4096);
+    let watched = Watched {
+        mem,
+        normal: AtomicUsize::new(0),
+    };
+    for threads in [1, 2] {
+        let config = SearchConfig {
+            chunk: 4096,
+            threads,
+            ..SearchConfig::default()
+        };
+        find_instances(&watched, 0x7ffa_1234_5678, &config).unwrap();
+    }
+    assert_eq!(watched.normal.load(Ordering::Relaxed), 0);
+    assert!(!deadlock_memory::priority::is_lowered());
+}

@@ -1,6 +1,7 @@
 //! Heap search: objects whose first qword is a given vtable.
 
 use std::ops::Range;
+use std::time::{Duration, Instant};
 
 use deadlock_memory::mem::{MemoryReader, Module, Region};
 use memchr::memmem;
@@ -20,6 +21,10 @@ pub struct SearchConfig {
     /// Most threads a search may use. A sweep reads gigabytes, so every extra thread spends
     /// that much more of the machine at once while the game is running.
     pub threads: usize,
+    /// How long a thread may read before it rests.
+    pub burst: Duration,
+    /// How long it rests. [`Duration::ZERO`] never rests.
+    pub rest: Duration,
 }
 
 impl Default for SearchConfig {
@@ -31,6 +36,11 @@ impl Default for SearchConfig {
             exclude: Vec::new(),
             limit: 4096,
             threads: 2,
+            // Under a frame at 240 fps. The check runs between chunks, so a thread overruns
+            // the burst by at most one chunk read. Resting adds at most a quarter to a
+            // search's wall time.
+            burst: Duration::from_millis(4),
+            rest: Duration::from_millis(1),
         }
     }
 }
@@ -143,8 +153,12 @@ fn search_stripe(
     stride: usize,
     hits: &mut [Vec<u64>],
 ) {
+    // Worker threads start at normal priority whatever their parent runs at, so each one
+    // lowers itself.
+    let _low = deadlock_memory::priority::lower();
     let chunk = (config.chunk & !7).max(8);
     let mut buf = vec![0u8; chunk];
+    let mut rested = Instant::now();
     for region in regions.iter().skip(first).step_by(stride) {
         if hits.iter().all(|h| h.len() >= config.limit) {
             return;
@@ -153,6 +167,10 @@ fn search_stripe(
         let end = region.base.saturating_add(region.size as u64);
         let mut cursor = start;
         while cursor < end {
+            if !config.rest.is_zero() && rested.elapsed() >= config.burst {
+                std::thread::sleep(config.rest);
+                rested = Instant::now();
+            }
             let want = chunk.min((end - cursor) as usize);
             let got = mem.read_partial(cursor, &mut buf[..want]);
             if got == want {
@@ -210,5 +228,12 @@ mod tests {
     #[test]
     fn a_default_search_is_gentle() {
         assert_eq!(SearchConfig::default().threads, 2);
+    }
+
+    #[test]
+    fn a_default_search_rests_within_a_frame() {
+        let config = SearchConfig::default();
+        assert!(!config.rest.is_zero());
+        assert!(config.burst <= Duration::from_millis(4));
     }
 }
