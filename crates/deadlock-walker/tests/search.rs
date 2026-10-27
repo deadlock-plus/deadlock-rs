@@ -150,3 +150,29 @@ fn the_exclusion_and_limit_apply_per_class_in_a_one_pass_search() {
     assert_eq!(sweep.hits[1].len(), 2);
     assert!(!sweep.hits[0].contains(&default_instance));
 }
+
+#[test]
+fn a_hit_across_a_chunk_boundary_is_found_whatever_the_chunk_size() {
+    use deadlock_memory::mock::MockMemory;
+    const BASE: u64 = 0x5000_0000;
+    const VT: u64 = 0x7ffa_1234_5678;
+    let planted = [BASE, BASE + 0x1000, BASE + 0x1008, BASE + 0x2ff8];
+    let mut heap = vec![0u8; 0x3000];
+    for &at in &planted {
+        let off = (at - BASE) as usize;
+        heap[off..off + 8].copy_from_slice(&VT.to_le_bytes());
+    }
+    let mut mem = MockMemory::new(1);
+    mem.write(BASE, &heap).add_region(BASE, heap.len());
+    for chunk in [12, 4097, 4100, 0x1004, 0x3000] {
+        let config = SearchConfig {
+            chunk,
+            ..SearchConfig::default()
+        };
+        assert_eq!(
+            find_instances(&mem, VT, &config).unwrap(),
+            planted,
+            "chunk {chunk}"
+        );
+    }
+}
